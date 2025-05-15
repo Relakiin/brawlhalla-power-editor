@@ -1,0 +1,14 @@
+{
+    "power_name": "The internal name of the power.",
+    "power_id": "The ID of the power.",
+    "order_id": "The order ID of the power. Currently unknown meaning.",
+    "dev_notes": "Notes from the developers. These give additional information about the power.",
+    "mission_tags": "These tags validate the scope of the power, such as which weapon it belongs to or if it's an aerial power. Needs more documentation.",
+    "priority": "The priority of the power, presumably to handle if a power should win over another in case of a clash. Needs more documentation.",
+    "cast_sound_event": "The sound event that plays when the power is cast. Needs more documentation.",
+    "hit_sound_event": "The sound event that plays when the power hits an enemy. Needs more documentation.",
+    "item_hit_sound_event": "Currently unknown.",
+    "target_method": "Appears to specify the logic of the power, such as PBAoE, GroundCheck, Smash, SmashRelease... Needs more documentation.",
+    "parent_item": "The parent item of the power. This is used to determine which weapon the power belongs to.",
+    "origin_power": "If this power is part of a move (such as a followup or a combo), this is the initial power it refers to. Needs more documentation."
+}
