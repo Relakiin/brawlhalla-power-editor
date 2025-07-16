@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { VisualizerData } from "../../types/VisualizerData";
 import HitboxUnit from "../PowerVisualizer/HitboxUnit";
+import PillShape from "../PowerVisualizer/PillShape";
 
 interface PowerVisualizerProps {
   visualizerData: VisualizerData;
@@ -93,8 +94,8 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
   //TODO: read the hurtboxes file to be more accurate instead of imagining a player
   const playerX = 200;
   const playerY = 300;
-  const playerWidth = 100;
-  const playerHeight = 100;
+  const playerWidth = 145;
+  const playerHeight = 160;
 
   return (
     <div className="collapse collapse-arrow bg-base-100 border border-gray-300 rounded-lg p-4 relative mb-5">
@@ -141,14 +142,15 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
               />
 
               {/* player */}
-              <ellipse
+              <PillShape
                 cx={playerX}
                 cy={playerY - playerHeight / 2}
                 rx={playerWidth / 2}
                 ry={playerHeight / 2}
                 fill="yellow"
                 stroke="black"
-                strokeWidth="2"
+                strokeWidth={2}
+                fillOpacity={1}
               />
 
               {/* hitboxes */}
