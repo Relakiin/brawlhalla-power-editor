@@ -9,6 +9,7 @@ interface HitboxUnitProps {
   fill: string;
   vx: string | undefined;
   vy: string | undefined;
+  outlineOnly?: boolean;
 }
 
 const HitboxUnit: React.FC<HitboxUnitProps> = ({
@@ -19,6 +20,7 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
   fill,
   vx,
   vy,
+  outlineOnly = false,
 }) => {
   // check if power has interpolated vector over cast time
   const parseVector = (vector: string | undefined) => {
@@ -122,7 +124,7 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
   return (
     <>
       {/* pill-shaped hitbox */}
-      <PillShape cx={cx} cy={cy} rx={rx} ry={ry} fill={fill} fillOpacity={0.2} />
+      <PillShape cx={cx} cy={cy} rx={rx} ry={ry} fill={fill} fillOpacity={0.2} outlineOnly={outlineOnly} />
 
       {/* direction line */}
       {Array.from({ length: maxLength }).map((_, index) => {

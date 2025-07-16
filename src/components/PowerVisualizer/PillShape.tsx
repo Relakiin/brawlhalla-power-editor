@@ -5,10 +5,11 @@ interface PillShapeProps {
   cy: number;
   rx: number;
   ry: number;
-  fill: string;
+  fill?: string;
   fillOpacity?: number;
   stroke?: string;
   strokeWidth?: number;
+  outlineOnly?: boolean;
 }
 
 const PillShape: React.FC<PillShapeProps> = ({
@@ -20,6 +21,7 @@ const PillShape: React.FC<PillShapeProps> = ({
   fillOpacity = 0.2,
   stroke,
   strokeWidth,
+  outlineOnly = false,
 }) => {
   return (
     <path
@@ -38,10 +40,10 @@ const PillShape: React.FC<PillShapeProps> = ({
             `a ${rx},${rx} 0 0 1 ${-rx * 2},0 ` + // Draw bottom semicircle
             `v ${-(ry - rx) * 2}` // Draw left edge of rectangle
       }
-      fill={fill}
-      fillOpacity={fillOpacity}
-      stroke={stroke}
-      strokeWidth={strokeWidth}
+      fill={outlineOnly ? 'none' : fill}
+      fillOpacity={outlineOnly ? 0 : fillOpacity}
+      stroke={outlineOnly ? (fill || stroke) : stroke}
+      strokeWidth={outlineOnly ? (strokeWidth || 2) : strokeWidth}
     />
   );
 };

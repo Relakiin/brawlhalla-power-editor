@@ -13,6 +13,7 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
   powerId,
 }) => {
   const [currentCastIndex, setCurrentCastIndex] = useState(0);
+  const [showOutlineOnly, setShowOutlineOnly] = useState(false);
 
   const previousPowerIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -106,7 +107,7 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
           <h3>Error: {visualizerData.error}</h3>
         ) : (
           <>
-            <div className="flex justify-between mb-4">
+            <div className="flex justify-between items-center mb-4">
               <button
                 className="btn btn-primary"
                 onClick={handlePrevious}
@@ -114,9 +115,22 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
               >
                 Previous
               </button>
-              <span>
-                Cast {currentCastIndex + 1} of {visualizerData.casts.length}
-              </span>
+              <div className="flex flex-col items-center">
+                <span>
+                  Cast {currentCastIndex + 1} of {visualizerData.casts.length}
+                </span>
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text mr-2">Outline Only</span>
+                    <input
+                      type="checkbox"
+                      className="checkbox"
+                      checked={showOutlineOnly}
+                      onChange={(e) => setShowOutlineOnly(e.target.checked)}
+                    />
+                  </label>
+                </div>
+              </div>
               <button
                 className="btn btn-primary"
                 onClick={handleNext}
@@ -183,6 +197,7 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
                           fill="red"
                           vx={impulseX}
                           vy={impulseY}
+                          outlineOnly={showOutlineOnly}
                         />
                       );
                     }
