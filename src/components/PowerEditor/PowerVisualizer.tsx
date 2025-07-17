@@ -13,25 +13,101 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
   powerId,
 }) => {
   const [currentCastIndex, setCurrentCastIndex] = useState(0);
+  const [currentFrame, setCurrentFrame] = useState(0);
+  console.log("🚀 ~ currentFrame:", currentFrame)
   const [showOutlineOnly, setShowOutlineOnly] = useState(false);
 
   const previousPowerIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (previousPowerIdRef.current !== powerId) {
       setCurrentCastIndex(0);
+      setCurrentFrame(0);
       previousPowerIdRef.current = powerId;
     }
   }, [powerId]);
 
+  // Calculate the total frames for a specific cast
+  const getTotalFramesForCast = (castIndex: number) => {
+    const cast = visualizerData.casts[castIndex];
+    return (cast?.cast_time?.startup || 0) + (cast?.cast_time?.active || 0);
+  };
+
+  // Calculate the cumulative frames up to a specific cast
+  const getCumulativeFrames = (upToCastIndex: number) => {
+    let totalFrames = 0;
+    for (let i = 0; i < upToCastIndex; i++) {
+      totalFrames += getTotalFramesForCast(i);
+    }
+    return totalFrames;
+  };
+
+  // Get the current cast and frame within that cast based on the global frame count
+  const getCurrentCastAndFrame = (globalFrame: number) => {
+    let remainingFrames = globalFrame;
+    let castIndex = 0;
+    
+    while (castIndex < visualizerData.casts.length) {
+      const castFrames = getTotalFramesForCast(castIndex);
+      if (remainingFrames < castFrames) {
+        return { castIndex, frameWithinCast: remainingFrames };
+      }
+      remainingFrames -= castFrames;
+      castIndex++;
+    }
+    
+    // If we've gone beyond all casts, return the last cast and its last frame
+    const lastCastIndex = Math.max(0, visualizerData.casts.length - 1);
+    return { 
+      castIndex: lastCastIndex, 
+      frameWithinCast: getTotalFramesForCast(lastCastIndex) - 1 
+    };
+  };
+
+  // Get total frames across all casts
+  const getTotalFramesAllCasts = () => {
+    return getCumulativeFrames(visualizerData.casts.length);
+  };
+
   const handleNext = () => {
     if (currentCastIndex < visualizerData.casts.length - 1) {
-      setCurrentCastIndex(currentCastIndex + 1);
+      const nextCastIndex = currentCastIndex + 1;
+      setCurrentCastIndex(nextCastIndex);
+      // Don't reset frame, just continue counting
     }
   };
 
   const handlePrevious = () => {
     if (currentCastIndex > 0) {
-      setCurrentCastIndex(currentCastIndex - 1);
+      const prevCastIndex = currentCastIndex - 1;
+      setCurrentCastIndex(prevCastIndex);
+      // Don't reset frame, just continue counting
+    }
+  };
+  
+  const handleNextFrame = () => {
+    const totalFramesAllCasts = getTotalFramesAllCasts();
+    if (currentFrame < totalFramesAllCasts - 1) {
+      const nextFrame = currentFrame + 1;
+      setCurrentFrame(nextFrame);
+      
+      // Update cast index if we've moved to the next cast
+      const { castIndex } = getCurrentCastAndFrame(nextFrame);
+      if (castIndex !== currentCastIndex) {
+        setCurrentCastIndex(castIndex);
+      }
+    }
+  };
+
+  const handlePreviousFrame = () => {
+    if (currentFrame > 0) {
+      const prevFrame = currentFrame - 1;
+      setCurrentFrame(prevFrame);
+      
+      // Update cast index if we've moved to the previous cast
+      const { castIndex } = getCurrentCastAndFrame(prevFrame);
+      if (castIndex !== currentCastIndex) {
+        setCurrentCastIndex(castIndex);
+      }
     }
   };
 
@@ -108,17 +184,34 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
         ) : (
           <>
             <div className="flex justify-between items-center mb-4">
-              <button
-                className="btn btn-primary"
-                onClick={handlePrevious}
-                disabled={currentCastIndex === 0}
-              >
-                Previous
-              </button>
+              <div className="flex gap-2">
+                <button
+                  className="btn btn-primary"
+                  onClick={handlePrevious}
+                  disabled={currentCastIndex === 0}
+                >
+                  Previous Cast
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handlePreviousFrame}
+                  disabled={currentFrame === 0}
+                >
+                  Previous Frame
+                </button>
+              </div>
               <div className="flex flex-col items-center">
-                <span>
-                  Cast {currentCastIndex + 1} of {visualizerData.casts.length}
-                </span>
+                <div className="flex gap-2 items-center">
+                  <span>
+                    Cast {currentCastIndex + 1} of {visualizerData.casts.length}
+                  </span>
+                  <span className="px-2 py-1 bg-base-200 rounded-md">
+                    Frame {currentFrame + 1} of {getTotalFramesAllCasts()}
+                  </span>
+                  <div className="px-3 py-1 bg-blue-500 text-white rounded-md">
+                    Cast Frame {getCurrentCastAndFrame(currentFrame).frameWithinCast + 1} / {getTotalFramesForCast(currentCastIndex)}
+                  </div>
+                </div>
                 <div className="form-control">
                   <label className="label cursor-pointer">
                     <span className="label-text mr-2">Outline Only</span>
@@ -131,13 +224,22 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
                   </label>
                 </div>
               </div>
-              <button
-                className="btn btn-primary"
-                onClick={handleNext}
-                disabled={currentCastIndex === visualizerData.casts.length - 1}
-              >
-                Next
-              </button>
+              <div className="flex gap-2">
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleNextFrame}
+                  disabled={currentFrame >= getTotalFramesAllCasts() - 1}
+                >
+                  Next Frame
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleNext}
+                  disabled={currentCastIndex === visualizerData.casts.length - 1}
+                >
+                  Next Cast
+                </button>
+              </div>
             </div>
             <svg
               width="100%"
@@ -173,7 +275,15 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
                 <></>
               ) : (
                 <>
-                  {(hitbox.aoe_radius_x ?? []).map((rx, index) => {
+                  {/* Show hitboxes only after startup frames and during active frames */}
+                  {visualizerData.casts[currentCastIndex]?.cast_time && 
+                   (() => {
+                     const { frameWithinCast } = getCurrentCastAndFrame(currentFrame);
+                     const startup = visualizerData.casts[currentCastIndex]?.cast_time?.startup || 0;
+                     const active = visualizerData.casts[currentCastIndex]?.cast_time?.active || 0;
+                     return frameWithinCast >= startup && frameWithinCast < (startup + active);
+                   })() && 
+                   (hitbox.aoe_radius_x ?? []).map((rx, index) => {
                     const ry = (hitbox.aoe_radius_y ?? [])[index];
                     const cx =
                       playerX +
@@ -194,7 +304,7 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
                           ry={parseFloat(ry)}
                           cx={cx}
                           cy={cy}
-                          fill="red"
+                          fill="rgba(255, 0, 0, 0.7)"
                           vx={impulseX}
                           vy={impulseY}
                           outlineOnly={showOutlineOnly}
