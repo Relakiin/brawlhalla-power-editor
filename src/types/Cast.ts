@@ -1,7 +1,8 @@
+import { CastTimeUnit } from "./CastTime";
 import { Hitbox } from "./Hitbox";
 
 export type Cast = {
-  cast_time?: string;
+  cast_time?: CastTimeUnit;
   hitboxes?: Hitbox;
   cast_impulse_x?: string;
   cast_impulse_y?: string;
