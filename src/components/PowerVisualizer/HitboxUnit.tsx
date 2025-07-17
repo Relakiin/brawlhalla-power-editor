@@ -1,3 +1,6 @@
+import React from "react";
+import PillShape from "./PillShape";
+
 interface HitboxUnitProps {
   rx: number;
   ry: number;
@@ -6,6 +9,7 @@ interface HitboxUnitProps {
   fill: string;
   vx: string | undefined;
   vy: string | undefined;
+  outlineOnly?: boolean;
 }
 
 const HitboxUnit: React.FC<HitboxUnitProps> = ({
@@ -16,6 +20,7 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
   fill,
   vx,
   vy,
+  outlineOnly = false,
 }) => {
   // check if power has interpolated vector over cast time
   const parseVector = (vector: string | undefined) => {
@@ -45,23 +50,81 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
     return points.join(" ");
   };
 
-  const scaleToEllipseEdge = (x: number, y: number) => {
+  // For pill shape, we need to determine if the point intersects with the semicircle or the rectangle part
+  const scaleToPillEdge = (x: number, y: number) => {
     const dx = x - cx;
     const dy = y - cy;
-
-    // scale factor to bring the point to the ellipse's edge
-    const scale = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
-
-    return {
-      x: cx + dx / scale,
-      y: cy + dy / scale,
-    };
+    
+    // Determine if the point is in the semicircle region or rectangle region
+    // For a horizontal pill (rx > ry)
+    if (rx > ry) {
+      const rectHalfWidth = rx - ry;
+      
+      // Check if point is in left or right semicircle region
+      if (Math.abs(dx) > rectHalfWidth) {
+        // In semicircle region
+        const circleCenterX = dx > 0 ? cx + rectHalfWidth : cx - rectHalfWidth;
+        const newDx = x - circleCenterX;
+        const distance = Math.sqrt(newDx * newDx + dy * dy);
+        return {
+          x: circleCenterX + (newDx / distance) * ry,
+          y: cy + (dy / distance) * ry
+        };
+      } else {
+        // In rectangle region
+        if (Math.abs(dy) > ry) {
+          const scale = Math.abs(ry / dy);
+          return {
+            x: cx + dx,
+            y: cy + dy * scale
+          };
+        } else {
+          // Point is inside the pill
+          const scale = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+          return {
+            x: cx + dx / scale,
+            y: cy + dy / scale
+          };
+        }
+      }
+    } else {
+      // For a vertical pill (ry > rx)
+      const rectHalfHeight = ry - rx;
+      
+      // Check if point is in top or bottom semicircle region
+      if (Math.abs(dy) > rectHalfHeight) {
+        // In semicircle region
+        const circleCenterY = dy > 0 ? cy + rectHalfHeight : cy - rectHalfHeight;
+        const newDy = y - circleCenterY;
+        const distance = Math.sqrt(dx * dx + newDy * newDy);
+        return {
+          x: cx + (dx / distance) * rx,
+          y: circleCenterY + (newDy / distance) * rx
+        };
+      } else {
+        // In rectangle region
+        if (Math.abs(dx) > rx) {
+          const scale = Math.abs(rx / dx);
+          return {
+            x: cx + dx * scale,
+            y: cy + dy
+          };
+        } else {
+          // Point is inside the pill
+          const scale = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+          return {
+            x: cx + dx / scale,
+            y: cy + dy / scale
+          };
+        }
+      }
+    }
   };
 
   return (
     <>
-      {/* hitbox */}
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={fill} fillOpacity={0.2} />
+      {/* pill-shaped hitbox */}
+      <PillShape cx={cx} cy={cy} rx={rx} ry={ry} fill={fill} fillOpacity={0.2} outlineOnly={outlineOnly} />
 
       {/* direction line */}
       {Array.from({ length: maxLength }).map((_, index) => {
@@ -113,7 +176,7 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
         const directionY = cy + vyValue;
 
         // adjust the endpoint to lie on the ellipse's edge
-        const { x: adjustedX, y: adjustedY } = scaleToEllipseEdge(
+        const { x: adjustedX, y: adjustedY } = scaleToPillEdge(
           directionX,
           directionY
         );

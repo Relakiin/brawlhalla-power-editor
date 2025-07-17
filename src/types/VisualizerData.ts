@@ -9,7 +9,6 @@ export type VisualizerData = {
 
 export const getVisualizerData = (power: Power): VisualizerData => {
   if (!power) return { casts: [], error: "Undefined power" };
-
   const castTimes = power.cast_time?.split(",") || [];
   const castImpulsesX = power.cast_impulse_x?.split(",") || [];
   const castImpulsesY = power.cast_impulse_y?.split(",") || [];
@@ -60,6 +59,5 @@ export const getVisualizerData = (power: Power): VisualizerData => {
       hitboxes: hitboxes[i] || undefined,
     });
   }
-
   return { casts };
 };

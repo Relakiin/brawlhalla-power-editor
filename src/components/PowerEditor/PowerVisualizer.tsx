@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { VisualizerData } from "../../types/VisualizerData";
 import HitboxUnit from "../PowerVisualizer/HitboxUnit";
+import PillShape from "../PowerVisualizer/PillShape";
 
 interface PowerVisualizerProps {
   visualizerData: VisualizerData;
@@ -12,6 +13,7 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
   powerId,
 }) => {
   const [currentCastIndex, setCurrentCastIndex] = useState(0);
+  const [showOutlineOnly, setShowOutlineOnly] = useState(false);
 
   const previousPowerIdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -93,8 +95,8 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
   //TODO: read the hurtboxes file to be more accurate instead of imagining a player
   const playerX = 200;
   const playerY = 300;
-  const playerWidth = 100;
-  const playerHeight = 100;
+  const playerWidth = 145;
+  const playerHeight = 160;
 
   return (
     <div className="collapse collapse-arrow bg-base-100 border border-gray-300 rounded-lg p-4 relative mb-5">
@@ -105,7 +107,7 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
           <h3>Error: {visualizerData.error}</h3>
         ) : (
           <>
-            <div className="flex justify-between mb-4">
+            <div className="flex justify-between items-center mb-4">
               <button
                 className="btn btn-primary"
                 onClick={handlePrevious}
@@ -113,9 +115,22 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
               >
                 Previous
               </button>
-              <span>
-                Cast {currentCastIndex + 1} of {visualizerData.casts.length}
-              </span>
+              <div className="flex flex-col items-center">
+                <span>
+                  Cast {currentCastIndex + 1} of {visualizerData.casts.length}
+                </span>
+                <div className="form-control">
+                  <label className="label cursor-pointer">
+                    <span className="label-text mr-2">Outline Only</span>
+                    <input
+                      type="checkbox"
+                      className="checkbox"
+                      checked={showOutlineOnly}
+                      onChange={(e) => setShowOutlineOnly(e.target.checked)}
+                    />
+                  </label>
+                </div>
+              </div>
               <button
                 className="btn btn-primary"
                 onClick={handleNext}
@@ -141,14 +156,15 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
               />
 
               {/* player */}
-              <ellipse
+              <PillShape
                 cx={playerX}
                 cy={playerY - playerHeight / 2}
                 rx={playerWidth / 2}
                 ry={playerHeight / 2}
                 fill="yellow"
                 stroke="black"
-                strokeWidth="2"
+                strokeWidth={2}
+                fillOpacity={1}
               />
 
               {/* hitboxes */}
@@ -181,6 +197,7 @@ const PowerVisualizer: React.FC<PowerVisualizerProps> = ({
                           fill="red"
                           vx={impulseX}
                           vy={impulseY}
+                          outlineOnly={showOutlineOnly}
                         />
                       );
                     }
