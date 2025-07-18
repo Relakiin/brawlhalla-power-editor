@@ -306,13 +306,80 @@ const PowerList: React.FC<PowerListProps> = ({
     };
   };
 
+  // Expand all children of a node recursively
+  const expandNodeAndChildren = (
+    node: PowerNode,
+    expandState: boolean
+  ): PowerNode => {
+    // Create a new node with the updated expanded state
+    const updatedNode = { ...node, expanded: expandState };
+
+    // Update children recursively
+    const updatedChildren: typeof node.children = {};
+    let hasUpdatedChildren = false;
+
+    // Process standard child nodes
+    CHILD_KEYS.forEach((key) => {
+      const childValue = node.children[key];
+      if (childValue) {
+        const expandedChild = expandNodeAndChildren(childValue, expandState);
+        if (expandedChild !== childValue) {
+          (updatedChildren[key] as typeof childValue) = expandedChild;
+          hasUpdatedChildren = true;
+        }
+      }
+    });
+
+    // Process directional children
+    if (node.children.if_dir && node.children.if_dir.length > 0) {
+      const updatedDirNodes = node.children.if_dir.map((dirNode) => {
+        const expandedNode = expandNodeAndChildren(dirNode.node, expandState);
+        if (expandedNode !== dirNode.node) {
+          return { ...dirNode, node: expandedNode };
+        }
+        return dirNode;
+      });
+
+      const hasChanges = updatedDirNodes.some(
+        (dirNode, i) => dirNode !== node.children.if_dir![i]
+      );
+
+      if (hasChanges) {
+        updatedChildren.if_dir = updatedDirNodes;
+        hasUpdatedChildren = true;
+      }
+    }
+
+    // If any children were updated, return a new node with updated children
+    if (hasUpdatedChildren) {
+      return {
+        ...updatedNode,
+        children: {
+          ...updatedNode.children,
+          ...updatedChildren,
+        },
+      };
+    }
+
+    return updatedNode;
+  };
+
   const toggleNode = (node: PowerNode) => {
+    // Determine if we're expanding or collapsing
+    const willExpand = !node.expanded;
+
     // Recursive function to update nodes and their children
     const updateNodesRecursively = (nodes: PowerNode[]): PowerNode[] => {
       return nodes.map((n) => {
         // If this is the node we want to toggle
         if (n.power.power_id === node.power.power_id) {
-          return { ...n, expanded: !n.expanded };
+          // If expanding, expand all children recursively
+          if (willExpand) {
+            return expandNodeAndChildren(n, true);
+          } else {
+            // If collapsing, just collapse this node
+            return { ...n, expanded: false };
+          }
         }
 
         // Check children recursively
@@ -472,6 +539,10 @@ const PowerList: React.FC<PowerListProps> = ({
     // Check if node has any children using our helper function
     const nodeHasChildren = hasChildren(node);
 
+    // Only root nodes (depth=0) can be expanded/collapsed
+    // Child nodes are always shown when their parent is expanded
+    const isExpandable = depth === 0;
+
     // Check if this node is the selected power or a parent of the selected power
     const isSelected = selectedPower?.power_id === node.power.power_id;
 
@@ -550,13 +621,16 @@ const PowerList: React.FC<PowerListProps> = ({
           }}
           onClick={() => {
             onSelectPower(node.power);
-            toggleNode(node);
+            // Only toggle expansion for root nodes
+            if (isExpandable) {
+              toggleNode(node);
+            }
           }}
         >
           <div className="truncate w-full">{node.power.power_name}</div>
         </div>
 
-        {nodeHasChildren && node.expanded && (
+        {nodeHasChildren && (depth === 0 ? node.expanded : true) && (
           <ul className="border-l border-base-300">
             {/* Render standard child nodes using our constant */}
             {CHILD_KEYS.map((key) => {
