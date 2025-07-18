@@ -39,7 +39,6 @@ const CHILD_KEYS = [
   "if_button",
   "if_interrupt",
 ] as const;
-type ChildKey = (typeof CHILD_KEYS)[number];
 
 const PowerList: React.FC<PowerListProps> = ({
   powers,
@@ -279,205 +278,21 @@ const PowerList: React.FC<PowerListProps> = ({
     }));
   };
 
-  // Helper function to process directional children (if_dir)
-  const processDirectionalChildren = (
-    dirNodes: { direction: Direction; node: PowerNode }[] | undefined,
-    updateFn: (node: PowerNode) => PowerNode
-  ): { updatedDirectionalNodes: typeof dirNodes; hasChanges: boolean } => {
-    if (!dirNodes || dirNodes.length === 0) {
-      return { updatedDirectionalNodes: dirNodes, hasChanges: false };
-    }
+  // No longer needed - removed helper function for processing directional children
 
-    const updatedDirNodes = dirNodes.map((dirNode) => {
-      const updatedNode = updateFn(dirNode.node);
-      if (updatedNode !== dirNode.node) {
-        return { ...dirNode, node: updatedNode };
-      }
-      return dirNode;
-    });
-
-    const hasChanges = updatedDirNodes.some(
-      (dirNode, i) => dirNode !== dirNodes[i]
-    );
-
-    return {
-      updatedDirectionalNodes: hasChanges ? updatedDirNodes : dirNodes,
-      hasChanges,
-    };
-  };
-
-  // Expand all children of a node recursively
-  const expandNodeAndChildren = (
-    node: PowerNode,
-    expandState: boolean
-  ): PowerNode => {
-    // Create a new node with the updated expanded state
-    const updatedNode = { ...node, expanded: expandState };
-
-    // Update children recursively
-    const updatedChildren: typeof node.children = {};
-    let hasUpdatedChildren = false;
-
-    // Process standard child nodes
-    CHILD_KEYS.forEach((key) => {
-      const childValue = node.children[key];
-      if (childValue) {
-        const expandedChild = expandNodeAndChildren(childValue, expandState);
-        if (expandedChild !== childValue) {
-          (updatedChildren[key] as typeof childValue) = expandedChild;
-          hasUpdatedChildren = true;
-        }
-      }
-    });
-
-    // Process directional children
-    if (node.children.if_dir && node.children.if_dir.length > 0) {
-      const updatedDirNodes = node.children.if_dir.map((dirNode) => {
-        const expandedNode = expandNodeAndChildren(dirNode.node, expandState);
-        if (expandedNode !== dirNode.node) {
-          return { ...dirNode, node: expandedNode };
-        }
-        return dirNode;
-      });
-
-      const hasChanges = updatedDirNodes.some(
-        (dirNode, i) => dirNode !== node.children.if_dir![i]
-      );
-
-      if (hasChanges) {
-        updatedChildren.if_dir = updatedDirNodes;
-        hasUpdatedChildren = true;
-      }
-    }
-
-    // If any children were updated, return a new node with updated children
-    if (hasUpdatedChildren) {
-      return {
-        ...updatedNode,
-        children: {
-          ...updatedNode.children,
-          ...updatedChildren,
-        },
-      };
-    }
-
-    return updatedNode;
+  // Simple function to toggle a node's expanded state
+  const toggleNodeExpansion = (node: PowerNode): PowerNode => {
+    return { ...node, expanded: !node.expanded };
   };
 
   const toggleNode = (node: PowerNode) => {
-    // Determine if we're expanding or collapsing
-    const willExpand = !node.expanded;
-
-    // Recursive function to update nodes and their children
+    // Simple function to toggle expansion state of root nodes only
     const updateNodesRecursively = (nodes: PowerNode[]): PowerNode[] => {
       return nodes.map((n) => {
         // If this is the node we want to toggle
         if (n.power.power_id === node.power.power_id) {
-          // If expanding, expand all children recursively
-          if (willExpand) {
-            return expandNodeAndChildren(n, true);
-          } else {
-            // If collapsing, just collapse this node
-            return { ...n, expanded: false };
-          }
+          return toggleNodeExpansion(n);
         }
-
-        // Check children recursively
-        const updatedChildren: typeof n.children = {};
-        let hasUpdatedChildren = false;
-
-        // Helper function to update a single node recursively
-        const updateNodeRecursively = (childNode: PowerNode): PowerNode => {
-          if (childNode.power.power_id === node.power.power_id) {
-            return { ...childNode, expanded: !childNode.expanded };
-          }
-
-          // Check children recursively
-          const updatedChildren: typeof childNode.children = {};
-          let hasUpdatedChildren = false;
-
-          // Check all child types (normal, if_hit, etc.)
-          Object.entries(childNode.children).forEach(([key, child]) => {
-            if (!child) return;
-
-            if (key === "if_dir" && Array.isArray(child)) {
-              // Use our helper function for processing directional children
-              const { updatedDirectionalNodes, hasChanges } =
-                processDirectionalChildren(child, updateNodeRecursively);
-
-              if (hasChanges) {
-                updatedChildren.if_dir = updatedDirectionalNodes;
-                hasUpdatedChildren = true;
-              }
-            } else if (key !== "if_dir") {
-              // Type-safe way to handle the different child types
-              // Handle all child types generically using our ChildKey type
-              const childKey = key as ChildKey;
-              const childValue = childNode.children[childKey];
-
-              if (childValue) {
-                const updatedNode = updateNodeRecursively(childValue);
-                if (updatedNode !== childValue) {
-                  // Use type assertion to safely assign the updated node
-                  (updatedChildren[childKey] as typeof childValue) =
-                    updatedNode;
-                  hasUpdatedChildren = true;
-                }
-              }
-            }
-          });
-
-          // If any children were updated, return a new node with updated children
-          if (hasUpdatedChildren) {
-            return {
-              ...childNode,
-              children: {
-                ...childNode.children,
-                ...updatedChildren,
-              },
-            };
-          }
-
-          // Otherwise return the original node
-          return childNode;
-        };
-
-        // Process all standard child nodes (excluding if_dir which needs special handling)
-
-        // Check each child type
-        CHILD_KEYS.forEach((key) => {
-          const childValue = n.children[key];
-          if (childValue) {
-            const updatedNode = updateNodeRecursively(childValue);
-            if (updatedNode !== childValue) {
-              // Use type assertion to safely assign the updated node
-              (updatedChildren[key] as typeof childValue) = updatedNode;
-              hasUpdatedChildren = true;
-            }
-          }
-        });
-
-        // Process directional children using a helper function
-        const { updatedDirectionalNodes, hasChanges } =
-          processDirectionalChildren(n.children.if_dir, updateNodeRecursively);
-
-        if (hasChanges) {
-          updatedChildren.if_dir = updatedDirectionalNodes;
-          hasUpdatedChildren = true;
-        }
-
-        // If any children were updated, return a new node with updated children
-        if (hasUpdatedChildren) {
-          return {
-            ...n,
-            children: {
-              ...n.children,
-              ...updatedChildren,
-            },
-          };
-        }
-
-        // Otherwise return the original node
         return n;
       });
     };
