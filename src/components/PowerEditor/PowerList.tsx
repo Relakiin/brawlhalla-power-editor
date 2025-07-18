@@ -565,7 +565,11 @@ const PowerList: React.FC<PowerListProps> = ({
 
               return (
                 <li key={`${key}-${childNode.power.power_id || depth}`}>
-                  <div className="text-xs text-gray-500 pointer-events-none select-none w-full">
+                  <div
+                    className={`text-xs ${
+                      key === "if_hit" ? "text-red-500" : "text-gray-500"
+                    } pointer-events-none select-none w-full`}
+                  >
                     {key}:
                   </div>
                   {renderPowerNode(childNode, depth + 1, newVisited)}
@@ -574,13 +578,13 @@ const PowerList: React.FC<PowerListProps> = ({
             })}
             {node.children.if_dir && node.children.if_dir.length > 0 && (
               <li className="">
-                <div className="text-xs text-gray-500 pointer-events-none select-none">
+                <div className="text-xs text-gray-500 pointer-events-none select-none w-full">
                   if_dir:
                 </div>
                 <ul className="border-l border-base-300 ml-2">
                   {node.children.if_dir.map((dirNode, idx) => (
                     <li key={`${node.power.power_id || "dir"}-dir-${idx}`}>
-                      <div className="text-xs text-gray-500 pointer-events-none select-none">
+                      <div className="text-xs text-gray-500 pointer-events-none select-none w-full">
                         {dirNode.direction}:
                       </div>
                       {renderPowerNode(dirNode.node, depth + 2, newVisited)}
