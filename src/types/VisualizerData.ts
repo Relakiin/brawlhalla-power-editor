@@ -67,6 +67,5 @@ export const getVisualizerData = (power: Power): VisualizerData => {
       hitboxes: hitboxes[i] || undefined,
     });
   }
-  console.log("🚀 ~ getVisualizerData ~ casts:", casts);
   return { casts };
 };
