@@ -45,6 +45,10 @@ const PowerList: React.FC<PowerListProps> = ({
   selectedPower,
   onSelectPower,
 }) => {
+  // Reference to the selected power element for scrolling
+  const selectedPowerRef = useRef<HTMLDivElement>(null);
+  // Reference to the scrollable container
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [expandedGroups, setExpandedGroups] = useState<{
     [key: string]: boolean;
   }>({});
@@ -430,6 +434,7 @@ const PowerList: React.FC<PowerListProps> = ({
         className="p-0 m-0 cursor-default bg-none!"
       >
         <div
+          ref={isSelected ? selectedPowerRef : undefined}
           className={`flex rounded-md w-full ${highlightClass}`}
           style={{
             fontSize: `${fontSize}px`,
@@ -527,6 +532,172 @@ const PowerList: React.FC<PowerListProps> = ({
     };
   }, [isDragging]);
 
+  // Helper function to check if a node contains a power with the given ID
+  const checkNodeContainsPower = useCallback(
+    (
+      parentNode: PowerNode,
+      powerId: string,
+      visited = new Set<string>()
+    ): boolean => {
+      if (
+        !parentNode.power.power_id ||
+        visited.has(parentNode.power.power_id)
+      ) {
+        return false;
+      }
+      visited.add(parentNode.power.power_id);
+
+      // Check if this node is the target power
+      if (parentNode.power.power_id === powerId) {
+        return true;
+      }
+
+      // Check all standard child types
+      for (const key of CHILD_KEYS) {
+        const childNode = parentNode.children[key];
+        if (childNode && childNode.power.power_id === powerId) {
+          return true;
+        }
+        if (
+          childNode &&
+          checkNodeContainsPower(childNode, powerId, new Set(visited))
+        ) {
+          return true;
+        }
+      }
+
+      // Check directional children
+      if (parentNode.children.if_dir) {
+        for (const dirChild of parentNode.children.if_dir) {
+          if (dirChild.node.power.power_id === powerId) {
+            return true;
+          }
+          if (
+            checkNodeContainsPower(dirChild.node, powerId, new Set(visited))
+          ) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    },
+    []
+  );
+
+  // Function to expand all parent groups and nodes for a selected power
+  const expandParentsForPower = useCallback(
+    (powerId: string | null | undefined) => {
+      if (!powerId) return;
+
+      // Find the group that contains this power
+      let foundInGroup = false;
+      let groupName = "";
+
+      // Check in grouped powers
+      for (const [group, nodes] of Object.entries(groupedPowerNodes)) {
+        for (const node of nodes) {
+          if (node.power.power_id === powerId) {
+            foundInGroup = true;
+            groupName = group;
+            break;
+          }
+
+          // Check if this node contains the power in its children
+          if (checkNodeContainsPower(node, powerId)) {
+            foundInGroup = true;
+            groupName = group;
+
+            // Expand this node
+            setGroupedPowerNodes((prev) => {
+              const newGrouped = { ...prev };
+              newGrouped[group] = newGrouped[group].map((n) => {
+                if (n.power.power_id === node.power.power_id) {
+                  return { ...n, expanded: true };
+                }
+                return n;
+              });
+              return newGrouped;
+            });
+
+            break;
+          }
+        }
+        if (foundInGroup) break;
+      }
+
+      // If found in a group, expand that group
+      if (foundInGroup) {
+        setExpandedGroups((prev) => ({
+          ...prev,
+          [groupName]: true,
+        }));
+      }
+
+      // Check in ungrouped powers if not found in groups
+      if (!foundInGroup) {
+        for (const node of ungroupedPowerNodes) {
+          if (node.power.power_id === powerId) {
+            break;
+          }
+
+          // Check if this node contains the power in its children
+          if (checkNodeContainsPower(node, powerId)) {
+            // Expand this node
+            setUngroupedPowerNodes((prev) => {
+              return prev.map((n) => {
+                if (n.power.power_id === node.power.power_id) {
+                  return { ...n, expanded: true };
+                }
+                return n;
+              });
+            });
+            break;
+          }
+        }
+      }
+    },
+    [groupedPowerNodes, ungroupedPowerNodes, checkNodeContainsPower]
+  );
+
+  // Track if we've already scrolled to the current selected power
+  const hasScrolledRef = useRef<string | null>(null);
+
+  // Scroll to selected power when it changes, but only once per selection
+  useEffect(() => {
+    if (
+      selectedPower?.power_id &&
+      hasScrolledRef.current !== selectedPower.power_id
+    ) {
+      // Expand parent nodes first
+      expandParentsForPower(selectedPower.power_id);
+
+      // Give time for the DOM to update after expansion
+      setTimeout(() => {
+        if (selectedPowerRef.current && scrollContainerRef.current) {
+          // Get current scroll container position
+          const container = scrollContainerRef.current;
+          const element = selectedPowerRef.current;
+
+          // Calculate the new scroll position to only change vertical scroll
+          const elementRect = element.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+
+          // Calculate how far to scroll to center the element vertically
+          const elementCenter = elementRect.top + elementRect.height / 2;
+          const containerCenter = containerRect.top + containerRect.height / 2;
+          const scrollAmount = elementCenter - containerCenter;
+
+          // Only scroll vertically
+          container.scrollTop += scrollAmount;
+
+          // Mark that we've scrolled to this power
+          hasScrolledRef.current = selectedPower.power_id || null;
+        }
+      }, 100);
+    }
+  }, [selectedPower, expandParentsForPower]);
+
   // Render the component
   return (
     <aside
@@ -537,7 +708,10 @@ const PowerList: React.FC<PowerListProps> = ({
       <div className="p-2 bg-base-200 font-bold border-b sticky top-0 z-10">
         Power List
       </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto custom-scrollbar"
+      >
         <ul className="menu menu-compact w-full">
           {/* Render grouped powers */}
           {Object.entries(groupedPowerNodes).map(([groupName, nodes]) => (
