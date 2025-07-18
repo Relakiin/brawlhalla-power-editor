@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Power } from "../../types/Power";
 import { Direction } from "../../enums/Direction";
 import { ActiveInput } from "../../types/ActiveInput";
@@ -595,14 +595,57 @@ const PowerList: React.FC<PowerListProps> = ({
     );
   };
 
+  // State for sidebar width
+  const [sidebarWidth, setSidebarWidth] = useState(256); // Default width (64 * 4 = 256px)
+  const [isDragging, setIsDragging] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const minWidth = 200; // Minimum width in pixels
+  const maxWidth = 500; // Maximum width in pixels
+
+  // Handle mouse down on the drag handle
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  // Handle mouse move for resizing
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !sidebarRef.current) return;
+
+      const newWidth = e.clientX;
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setSidebarWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    if (isDragging) {
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isDragging]);
+
   // Render the component
   return (
-    <aside className="h-[calc(100vh-2rem)] w-64 flex-shrink-0 overflow-hidden flex flex-col border rounded-md shadow-sm">
+    <aside
+      ref={sidebarRef}
+      className="h-[calc(100vh-2rem)] flex-shrink-0 overflow-hidden flex flex-col border rounded-md shadow-sm relative"
+      style={{ width: `${sidebarWidth}px` }}
+    >
       <div className="p-2 bg-base-200 font-bold border-b sticky top-0 z-10">
         Power List
       </div>
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <ul className="menu menu-compact p-2">
+        <ul className="menu menu-compact w-full">
           {/* Render grouped powers */}
           {Object.entries(groupedPowerNodes).map(([groupName, nodes]) => (
             <li key={groupName} className="mb-4">
@@ -633,6 +676,17 @@ const PowerList: React.FC<PowerListProps> = ({
           )}
         </ul>
       </div>
+      {/* Resize handle */}
+      <div
+        className="absolute top-0 right-0 w-1 h-full cursor-ew-resize hover:bg-sky-400 active:bg-sky-600 transition-colors"
+        onMouseDown={handleMouseDown}
+        style={{
+          opacity: isDragging ? 1 : 0.5,
+          backgroundColor: isDragging
+            ? "rgb(14, 165, 233)"
+            : "rgba(100, 100, 100, 0.3)",
+        }}
+      />
     </aside>
   );
 };
@@ -651,6 +705,17 @@ const scrollbarStyles = `
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     background-color: rgba(100, 100, 100, 0.8);
+  }
+  
+  /* Styles for resize handle interaction */
+  .resize-handle {
+    transition: background-color 0.2s ease;
+  }
+  .resize-handle:hover {
+    background-color: rgb(14, 165, 233, 0.5);
+  }
+  .resize-handle:active {
+    background-color: rgb(14, 165, 233);
   }
 `;
 
