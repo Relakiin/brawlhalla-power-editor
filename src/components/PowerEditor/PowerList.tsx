@@ -544,7 +544,7 @@ const PowerList: React.FC<PowerListProps> = ({
         className="p-0 m-0 cursor-default bg-none!"
       >
         <div
-          className={`flex rounded-md ${highlightClass}`}
+          className={`flex rounded-md w-full ${highlightClass}`}
           style={{
             fontSize: `${fontSize}px`,
           }}
