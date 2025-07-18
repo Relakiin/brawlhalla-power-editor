@@ -196,13 +196,13 @@ const PowerList: React.FC<PowerListProps> = ({
         }
       };
 
-      // Process all standard combo types
-      processComboRelationship("normal", "normal");
-      processComboRelationship("if_hit", "if_hit");
-      processComboRelationship("if_release", "if_release");
-      processComboRelationship("if_wall", "if_wall");
-      processComboRelationship("if_button", "if_button");
-      processComboRelationship("if_interrupt", "if_interrupt");
+      // Process all standard combo types using the same keys array
+      const comboKeys = ['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const;
+      
+      // Process each combo relationship
+      comboKeys.forEach(key => {
+        processComboRelationship(key, key);
+      });
 
       // Process directional combos separately as they have a different structure
       if (comboTree.if_dir && comboTree.if_dir.length > 0) {
@@ -311,73 +311,17 @@ const PowerList: React.FC<PowerListProps> = ({
               }
             } else if (key !== "if_dir") {
               // Type-safe way to handle the different child types
-              switch (key) {
-                case "normal":
-                  if (childNode.children.normal) {
-                    const updatedNode = updateNodeRecursively(
-                      childNode.children.normal
-                    );
-                    if (updatedNode !== childNode.children.normal) {
-                      updatedChildren.normal = updatedNode;
-                      hasUpdatedChildren = true;
-                    }
-                  }
-                  break;
-                case "if_hit":
-                  if (childNode.children.if_hit) {
-                    const updatedNode = updateNodeRecursively(
-                      childNode.children.if_hit
-                    );
-                    if (updatedNode !== childNode.children.if_hit) {
-                      updatedChildren.if_hit = updatedNode;
-                      hasUpdatedChildren = true;
-                    }
-                  }
-                  break;
-                case "if_release":
-                  if (childNode.children.if_release) {
-                    const updatedNode = updateNodeRecursively(
-                      childNode.children.if_release
-                    );
-                    if (updatedNode !== childNode.children.if_release) {
-                      updatedChildren.if_release = updatedNode;
-                      hasUpdatedChildren = true;
-                    }
-                  }
-                  break;
-                case "if_wall":
-                  if (childNode.children.if_wall) {
-                    const updatedNode = updateNodeRecursively(
-                      childNode.children.if_wall
-                    );
-                    if (updatedNode !== childNode.children.if_wall) {
-                      updatedChildren.if_wall = updatedNode;
-                      hasUpdatedChildren = true;
-                    }
-                  }
-                  break;
-                case "if_button":
-                  if (childNode.children.if_button) {
-                    const updatedNode = updateNodeRecursively(
-                      childNode.children.if_button
-                    );
-                    if (updatedNode !== childNode.children.if_button) {
-                      updatedChildren.if_button = updatedNode;
-                      hasUpdatedChildren = true;
-                    }
-                  }
-                  break;
-                case "if_interrupt":
-                  if (childNode.children.if_interrupt) {
-                    const updatedNode = updateNodeRecursively(
-                      childNode.children.if_interrupt
-                    );
-                    if (updatedNode !== childNode.children.if_interrupt) {
-                      updatedChildren.if_interrupt = updatedNode;
-                      hasUpdatedChildren = true;
-                    }
-                  }
-                  break;
+              // Handle all child types generically using type assertion to ensure type safety
+              const childKey = key as keyof Omit<PowerNode['children'], 'if_dir'>;
+              const childValue = childNode.children[childKey];
+              
+              if (childValue) {
+                const updatedNode = updateNodeRecursively(childValue);
+                if (updatedNode !== childValue) {
+                  // Use type assertion to safely assign the updated node
+                  (updatedChildren[childKey] as typeof childValue) = updatedNode;
+                  hasUpdatedChildren = true;
+                }
               }
             }
           });
@@ -397,59 +341,21 @@ const PowerList: React.FC<PowerListProps> = ({
           return childNode;
         };
 
-        // Check normal child
-        if (n.children.normal) {
-          const updatedNode = updateNodeRecursively(n.children.normal);
-          if (updatedNode !== n.children.normal) {
-            updatedChildren.normal = updatedNode;
-            hasUpdatedChildren = true;
+        // Process all standard child nodes (excluding if_dir which needs special handling)
+        const childKeys = ['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const;
+        
+        // Check each child type
+        childKeys.forEach(key => {
+          const childValue = n.children[key];
+          if (childValue) {
+            const updatedNode = updateNodeRecursively(childValue);
+            if (updatedNode !== childValue) {
+              // Use type assertion to safely assign the updated node
+              (updatedChildren[key] as typeof childValue) = updatedNode;
+              hasUpdatedChildren = true;
+            }
           }
-        }
-
-        // Check if_hit child
-        if (n.children.if_hit) {
-          const updatedNode = updateNodeRecursively(n.children.if_hit);
-          if (updatedNode !== n.children.if_hit) {
-            updatedChildren.if_hit = updatedNode;
-            hasUpdatedChildren = true;
-          }
-        }
-
-        // Check if_release child
-        if (n.children.if_release) {
-          const updatedNode = updateNodeRecursively(n.children.if_release);
-          if (updatedNode !== n.children.if_release) {
-            updatedChildren.if_release = updatedNode;
-            hasUpdatedChildren = true;
-          }
-        }
-
-        // Check if_wall child
-        if (n.children.if_wall) {
-          const updatedNode = updateNodeRecursively(n.children.if_wall);
-          if (updatedNode !== n.children.if_wall) {
-            updatedChildren.if_wall = updatedNode;
-            hasUpdatedChildren = true;
-          }
-        }
-
-        // Check if_button child
-        if (n.children.if_button) {
-          const updatedNode = updateNodeRecursively(n.children.if_button);
-          if (updatedNode !== n.children.if_button) {
-            updatedChildren.if_button = updatedNode;
-            hasUpdatedChildren = true;
-          }
-        }
-
-        // Check if_interrupt child
-        if (n.children.if_interrupt) {
-          const updatedNode = updateNodeRecursively(n.children.if_interrupt);
-          if (updatedNode !== n.children.if_interrupt) {
-            updatedChildren.if_interrupt = updatedNode;
-            hasUpdatedChildren = true;
-          }
-        }
+        });
 
         // Check if_dir children
         if (n.children.if_dir && n.children.if_dir.length > 0) {
@@ -561,13 +467,13 @@ const PowerList: React.FC<PowerListProps> = ({
         );
       };
 
-      // Check all standard combo types
-      if (checkChild(currentNode.children.normal)) return true;
-      if (checkChild(currentNode.children.if_hit)) return true;
-      if (checkChild(currentNode.children.if_release)) return true;
-      if (checkChild(currentNode.children.if_wall)) return true;
-      if (checkChild(currentNode.children.if_button)) return true;
-      if (checkChild(currentNode.children.if_interrupt)) return true;
+      // Check all standard combo types using the same keys we defined elsewhere
+      const childKeys = ['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const;
+      
+      // Check each child type
+      for (const key of childKeys) {
+        if (checkChild(currentNode.children[key])) return true;
+      }
 
       // Check directional combos
       if (currentNode.children.if_dir) {
@@ -619,84 +525,23 @@ const PowerList: React.FC<PowerListProps> = ({
 
         {hasChildren && node.expanded && (
           <ul className="border-l border-base-300 ml-2">
-            {node.children.normal && (
-              <li>
-                <div
-                  className="text-xs text-gray-500 pl-2 py-1"
-                  style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                >
-                  normal:
-                </div>
-                {renderPowerNode(node.children.normal, depth + 1, newVisited)}
-              </li>
-            )}
-            {node.children.if_hit && (
-              <li>
-                <div
-                  className="text-xs text-gray-500 pl-2 py-1"
-                  style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                >
-                  if_hit:
-                </div>
-                {renderPowerNode(node.children.if_hit, depth + 1, newVisited)}
-              </li>
-            )}
-            {node.children.if_release && (
-              <li>
-                <div
-                  className="text-xs text-gray-500 pl-2 py-1"
-                  style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                >
-                  if_release:
-                </div>
-                {renderPowerNode(
-                  node.children.if_release,
-                  depth + 1,
-                  newVisited
-                )}
-              </li>
-            )}
-            {node.children.if_wall && (
-              <li>
-                <div
-                  className="text-xs text-gray-500 pl-2 py-1"
-                  style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                >
-                  if_wall:
-                </div>
-                {renderPowerNode(node.children.if_wall, depth + 1, newVisited)}
-              </li>
-            )}
-            {node.children.if_button && (
-              <li>
-                <div
-                  className="text-xs text-gray-500 pl-2 py-1"
-                  style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                >
-                  if_button:
-                </div>
-                {renderPowerNode(
-                  node.children.if_button,
-                  depth + 1,
-                  newVisited
-                )}
-              </li>
-            )}
-            {node.children.if_interrupt && (
-              <li>
-                <div
-                  className="text-xs text-gray-500 pl-2 py-1"
-                  style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                >
-                  if_interrupt:
-                </div>
-                {renderPowerNode(
-                  node.children.if_interrupt,
-                  depth + 1,
-                  newVisited
-                )}
-              </li>
-            )}
+            {/* Render standard child nodes using the same childKeys array */}
+            {(['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const).map(key => {
+              const childNode = node.children[key];
+              if (!childNode) return null;
+              
+              return (
+                <li key={`${key}-${childNode.power.power_id || depth}`}>
+                  <div
+                    className="text-xs text-gray-500 pl-2 py-1"
+                    style={{ paddingLeft: `${depth * 8 + 10}px` }}
+                  >
+                    {key}:
+                  </div>
+                  {renderPowerNode(childNode, depth + 1, newVisited)}
+                </li>
+              );
+            })}
             {node.children.if_dir && node.children.if_dir.length > 0 && (
               <li>
                 <div
