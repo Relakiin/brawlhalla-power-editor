@@ -539,25 +539,25 @@ const PowerList: React.FC<PowerListProps> = ({
     const fontSize = Math.max(14 - depth, 10);
 
     return (
-      <li key={node.power.power_id || `node-${depth}`} className="mb-1">
+      <li
+        key={node.power.power_id || `node-${depth}`}
+        className="p-0 m-0 cursor-default bg-none!"
+      >
         <div
-          className={`flex items-center justify-between px-2 py-1 rounded-md ${highlightClass}`}
+          className={`flex rounded-md ${highlightClass}`}
           style={{
             fontSize: `${fontSize}px`,
-            paddingLeft: `${depth * 8 + 8}px`,
           }}
           onClick={() => {
             onSelectPower(node.power);
             toggleNode(node);
           }}
         >
-          <div className="flex-1 truncate" title={node.power.power_name || ""}>
-            {node.power.power_name}
-          </div>
+          <div className="truncate w-full">{node.power.power_name}</div>
         </div>
 
         {nodeHasChildren && node.expanded && (
-          <ul className="border-l border-base-300 ml-1">
+          <ul className="border-l border-base-300">
             {/* Render standard child nodes using our constant */}
             {CHILD_KEYS.map((key) => {
               const childNode = node.children[key];
@@ -565,10 +565,7 @@ const PowerList: React.FC<PowerListProps> = ({
 
               return (
                 <li key={`${key}-${childNode.power.power_id || depth}`}>
-                  <div
-                    className="text-xs text-gray-500 pl-2 py-1 pointer-events-none select-none"
-                    style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                  >
+                  <div className="text-xs text-gray-500 pointer-events-none select-none w-full">
                     {key}:
                   </div>
                   {renderPowerNode(childNode, depth + 1, newVisited)}
@@ -576,20 +573,14 @@ const PowerList: React.FC<PowerListProps> = ({
               );
             })}
             {node.children.if_dir && node.children.if_dir.length > 0 && (
-              <li>
-                <div
-                  className="text-xs text-gray-500 pl-2 py-1 pointer-events-none select-none"
-                  style={{ paddingLeft: `${depth * 8 + 10}px` }}
-                >
+              <li className="">
+                <div className="text-xs text-gray-500 pointer-events-none select-none">
                   if_dir:
                 </div>
                 <ul className="border-l border-base-300 ml-2">
                   {node.children.if_dir.map((dirNode, idx) => (
                     <li key={`${node.power.power_id || "dir"}-dir-${idx}`}>
-                      <div
-                        className="text-xs text-gray-500 pl-2 py-1 pointer-events-none select-none"
-                        style={{ paddingLeft: `${depth * 8 + 16}px` }}
-                      >
+                      <div className="text-xs text-gray-500 pointer-events-none select-none">
                         {dirNode.direction}:
                       </div>
                       {renderPowerNode(dirNode.node, depth + 2, newVisited)}
