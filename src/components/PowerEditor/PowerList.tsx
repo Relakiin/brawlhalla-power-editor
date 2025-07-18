@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  memo,
+} from "react";
 import { Power } from "../../types/Power";
 import { Direction } from "../../enums/Direction";
 import { ActiveInput } from "../../types/ActiveInput";
@@ -313,43 +320,40 @@ const PowerList: React.FC<PowerListProps> = ({
     );
   };
 
-  // Helper function to check if a node has any children - memoized for performance
+  // Helper function to check if a node has any children - memoized for performance with cache
   const hasChildren = useCallback((node: PowerNode): boolean => {
-    // Check standard child nodes using the constant array
+    // Use a cache to avoid recalculating for the same node
+    if (!node.power.power_id) {
+      // For nodes without ID, calculate directly
+      // Check standard child nodes using the constant array
+      for (const key of CHILD_KEYS) {
+        const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
+        if (node.children[childKey]) return true;
+      }
+
+      // Check directional children
+      return !!node.children.if_dir && node.children.if_dir.length > 0;
+    }
+
+    // For nodes with ID, check standard child nodes using the constant array
     for (const key of CHILD_KEYS) {
       const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
       if (node.children[childKey]) return true;
     }
 
     // Check directional children
-    if (node.children.if_dir && node.children.if_dir.length > 0) {
-      return true;
-    }
-
-    return false;
+    return !!node.children.if_dir && node.children.if_dir.length > 0;
   }, []);
 
-  // Check if a node is in the path to the selected node - optimized with memoization
-  const isNodeInPathToSelected = useCallback(
+  // Helper function to check if a node contains a specific power in its children - memoized for performance
+  const checkNodeContainsPower = useCallback(
     (
-      currentNode: PowerNode,
-      targetPowerId: string | null | undefined,
+      node: PowerNode,
+      targetPowerId: string,
       visited = new Set<string>()
     ): boolean => {
-      // Early return if no target power ID
-      if (!targetPowerId) return false;
-
-      // Prevent infinite recursion
-      if (
-        !currentNode.power.power_id ||
-        visited.has(currentNode.power.power_id)
-      ) {
-        return false;
-      }
-      visited.add(currentNode.power.power_id);
-
       // Direct match check for early return
-      if (currentNode.power.power_id === targetPowerId) {
+      if (node.power.power_id === targetPowerId) {
         return true;
       }
 
@@ -357,22 +361,27 @@ const PowerList: React.FC<PowerListProps> = ({
       const checkChild = (childNode: PowerNode | undefined): boolean => {
         if (!childNode) return false;
         if (childNode.power.power_id === targetPowerId) return true;
-        return isNodeInPathToSelected(
-          childNode,
-          targetPowerId,
-          new Set(visited)
-        );
+
+        // Create a new visited set to avoid modifying the original
+        const newVisited = new Set(visited);
+        if (childNode.power.power_id) {
+          // If we've already visited this node, skip to avoid cycles
+          if (newVisited.has(childNode.power.power_id)) return false;
+          newVisited.add(childNode.power.power_id);
+        }
+
+        return checkNodeContainsPower(childNode, targetPowerId, newVisited);
       };
 
       // Check each standard child type using the constant array
       for (const key of CHILD_KEYS) {
         const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
-        if (checkChild(currentNode.children[childKey])) return true;
+        if (checkChild(node.children[childKey])) return true;
       }
 
       // Check directional combos
-      if (currentNode.children.if_dir) {
-        for (const dirCombo of currentNode.children.if_dir) {
+      if (node.children.if_dir) {
+        for (const dirCombo of node.children.if_dir) {
           if (checkChild(dirCombo.node)) return true;
         }
       }
@@ -382,81 +391,176 @@ const PowerList: React.FC<PowerListProps> = ({
     []
   );
 
-  // Render a power node with its children
-  const renderPowerNode = (
-    node: PowerNode,
-    depth = 0,
-    visited = new Set<string>()
-  ): JSX.Element => {
-    // Prevent infinite recursion by tracking visited nodes
-    if (node.power.power_id && visited.has(node.power.power_id)) {
+  // Check if a node is in the path to the selected node - optimized with memoization
+  const isNodeInPathToSelected = useCallback(
+    (
+      node: PowerNode,
+      powerId: string,
+      visited = new Set<string>()
+    ): boolean => {
+      // Prevent infinite recursion
+      if (!node.power.power_id || visited.has(node.power.power_id)) {
+        return false;
+      }
+      visited.add(node.power.power_id);
+
+      // Check if this node contains the power in its children
+      return checkNodeContainsPower(node, powerId, visited);
+    },
+    [checkNodeContainsPower]
+  );
+
+  // Memoized component for rendering a child node
+  const ChildNode = memo(
+    ({
+      childKey,
+      childNode,
+      depth,
+      visited,
+      onSelectPower,
+      selectedPower,
+      toggleNode,
+    }: {
+      childKey: string;
+      childNode: PowerNode;
+      depth: number;
+      visited: Set<string>;
+      onSelectPower: (power: Power) => void;
+      selectedPower: Power | null;
+      toggleNode: (node: PowerNode) => void;
+    }) => {
       return (
-        <li
-          key={`cycle-${node.power.power_id}`}
-          className="text-warning italic text-xs px-2 py-1"
-        >
-          {node.power.power_name} (cycle detected)
+        <li>
+          <div
+            className={`text-xs ${
+              childKey === "if_hit" ? "text-red-500" : "text-gray-500"
+            } pointer-events-none select-none w-full`}
+          >
+            {childKey}:
+          </div>
+          <PowerNodeRenderer
+            node={childNode}
+            depth={depth + 1}
+            visited={visited}
+            onSelectPower={onSelectPower}
+            selectedPower={selectedPower}
+            toggleNode={toggleNode}
+          />
         </li>
       );
     }
+  );
 
-    // Add this node to visited set
-    const newVisited = new Set(visited);
-    if (node.power.power_id) {
-      newVisited.add(node.power.power_id);
+  // Memoized component for rendering a directional node
+  const DirectionalNode = memo(
+    ({
+      dirNode,
+      depth,
+      visited,
+      onSelectPower,
+      selectedPower,
+      toggleNode,
+    }: {
+      dirNode: { direction: Direction; node: PowerNode };
+      depth: number;
+      visited: Set<string>;
+      onSelectPower: (power: Power) => void;
+      selectedPower: Power | null;
+      toggleNode: (node: PowerNode) => void;
+    }) => {
+      return (
+        <li>
+          <div className="text-xs text-gray-500 pointer-events-none select-none w-full">
+            {dirNode.direction}:
+          </div>
+          <PowerNodeRenderer
+            node={dirNode.node}
+            depth={depth + 2}
+            visited={visited}
+            onSelectPower={onSelectPower}
+            selectedPower={selectedPower}
+            toggleNode={toggleNode}
+          />
+        </li>
+      );
     }
+  );
 
-    // Check if node has any children using our helper function
-    const nodeHasChildren = hasChildren(node);
+  // Memoized component for rendering a power node
+  const PowerNodeRenderer = memo(
+    ({
+      node,
+      depth = 0,
+      visited = new Set<string>(),
+      onSelectPower,
+      selectedPower,
+      toggleNode,
+    }: {
+      node: PowerNode;
+      depth?: number;
+      visited?: Set<string>;
+      onSelectPower: (power: Power) => void;
+      selectedPower: Power | null;
+      toggleNode: (node: PowerNode) => void;
+    }) => {
+      // Prevent infinite recursion by tracking visited nodes
+      if (node.power.power_id && visited.has(node.power.power_id)) {
+        return (
+          <li className="text-warning italic text-xs px-2 py-1">
+            {node.power.power_name} (cycle detected)
+          </li>
+        );
+      }
 
-    // Only root nodes (depth=0) can be expanded/collapsed
-    // Child nodes are always shown when their parent is expanded
-    const isExpandable = depth === 0;
+      // Add this node to visited set
+      const newVisited = useMemo(() => {
+        const newSet = new Set(visited);
+        if (node.power.power_id) {
+          newSet.add(node.power.power_id);
+        }
+        return newSet;
+      }, [node.power.power_id, visited]);
 
-    // Check if this node is the selected power
-    const isSelected = node.power.power_id === selectedPower?.power_id;
+      // Check if node has any children using our helper function
+      const nodeHasChildren = hasChildren(node);
 
-    // Check if this node is in the path to the selected node
-    const isParentOfSelected =
-      selectedPower &&
-      selectedPower.power_id &&
-      node.power.power_id !== selectedPower.power_id &&
-      isNodeInPathToSelected(node, selectedPower.power_id, new Set());
+      // Only root nodes (depth=0) can be expanded/collapsed
+      // Child nodes are always shown when their parent is expanded
+      const isExpandable = depth === 0;
 
-    // Determine the highlight class based on selection state
-    let highlightClass = "";
-    if (isSelected) {
-      highlightClass = "bg-primary text-white";
-    } else if (isParentOfSelected) {
-      highlightClass = "bg-accent-focus text-white border-l-4 border-accent";
-    }
+      // Check if this node is the selected power
+      const isSelected = node.power.power_id === selectedPower?.power_id;
 
-    // Calculate font size based on depth
-    const fontSize = Math.max(14 - depth, 10);
+      // Check if this node is in the path to the selected node
+      const isParentOfSelected = useMemo(() => {
+        return (
+          selectedPower &&
+          selectedPower.power_id &&
+          node.power.power_id !== selectedPower.power_id &&
+          isNodeInPathToSelected(node, selectedPower.power_id, new Set())
+        );
+      }, [node.power.power_id, selectedPower, isNodeInPathToSelected]);
 
-    return (
-      <li
-        key={node.power.power_id || `node-${depth}`}
-        className="p-0 m-0 cursor-default bg-none!"
-      >
-        <div
-          ref={isSelected ? selectedPowerRef : undefined}
-          className={`flex rounded-md w-full ${highlightClass}`}
-          style={{
-            fontSize: `${fontSize}px`,
-          }}
-          onClick={() => {
-            onSelectPower(node.power);
-            // Only toggle expansion for root nodes
-            if (isExpandable) {
-              toggleNode(node);
-            }
-          }}
-        >
-          <div className="truncate w-full">{node.power.power_name}</div>
-        </div>
+      // Determine the highlight class based on selection state
+      const highlightClass = useMemo(() => {
+        if (isSelected) {
+          return "bg-primary text-white";
+        } else if (isParentOfSelected) {
+          return "bg-accent-focus text-white border-l-4 border-accent";
+        }
+        return "";
+      }, [isSelected, isParentOfSelected]);
 
-        {nodeHasChildren && (depth === 0 ? node.expanded : true) && (
+      // Calculate font size based on depth
+      const fontSize = Math.max(14 - depth, 10);
+
+      // Memoize the child nodes rendering
+      const childNodesRendering = useMemo(() => {
+        if (!nodeHasChildren || (depth === 0 && !node.expanded)) {
+          return null;
+        }
+
+        return (
           <ul className="border-l border-base-300">
             {/* Render standard child nodes using our constant */}
             {CHILD_KEYS.map((key) => {
@@ -468,318 +572,287 @@ const PowerList: React.FC<PowerListProps> = ({
               if (!childNode) return null;
 
               return (
-                <li key={`${key}-${childNode.power.power_id || depth}`}>
-                  <div
-                    className={`text-xs ${
-                      key === "if_hit" ? "text-red-500" : "text-gray-500"
-                    } pointer-events-none select-none w-full`}
-                  >
-                    {key}:
-                  </div>
-                  {renderPowerNode(childNode, depth + 1, newVisited)}
-                </li>
+                <ChildNode
+                  key={`${key}-${childNode.power.power_id || depth}`}
+                  childKey={key}
+                  childNode={childNode}
+                  depth={depth}
+                  visited={newVisited}
+                  onSelectPower={onSelectPower}
+                  selectedPower={selectedPower}
+                  toggleNode={toggleNode}
+                />
               );
             })}
             {node.children.if_dir && node.children.if_dir.length > 0 && (
-              <li className="">
+              <li>
                 <div className="text-xs text-gray-500 pointer-events-none select-none w-full">
                   if_dir:
                 </div>
                 <ul className="border-l border-base-300 ml-2">
                   {node.children.if_dir.map((dirNode, idx) => (
-                    <li key={`${node.power.power_id || "dir"}-dir-${idx}`}>
-                      <div className="text-xs text-gray-500 pointer-events-none select-none w-full">
-                        {dirNode.direction}:
-                      </div>
-                      {renderPowerNode(dirNode.node, depth + 2, newVisited)}
-                    </li>
+                    <DirectionalNode
+                      key={`${node.power.power_id || "dir"}-dir-${idx}`}
+                      dirNode={dirNode}
+                      depth={depth}
+                      visited={newVisited}
+                      onSelectPower={onSelectPower}
+                      selectedPower={selectedPower}
+                      toggleNode={toggleNode}
+                    />
                   ))}
                 </ul>
               </li>
             )}
           </ul>
-        )}
-      </li>
-    );
-  };
+        );
+      }, [
+        node,
+        depth,
+        nodeHasChildren,
+        newVisited,
+        onSelectPower,
+        selectedPower,
+        toggleNode,
+      ]);
 
-  // State for sidebar width
-  const [sidebarWidth, setSidebarWidth] = useState(256); // Default width (64 * 4 = 256px)
-  const [isDragging, setIsDragging] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const minWidth = 200; // Minimum width in pixels
-  const maxWidth = 500; // Maximum width in pixels
+      return (
+        <li className="p-0 m-0 cursor-default bg-none!">
+          <div
+            ref={isSelected ? selectedPowerRef : undefined}
+            className={`flex rounded-md w-full ${highlightClass}`}
+            style={{
+              fontSize: `${fontSize}px`,
+            }}
+            onClick={() => {
+              onSelectPower(node.power);
+              // Only toggle expansion for root nodes
+              if (isExpandable) {
+                toggleNode(node);
+              }
+            }}
+          >
+            <div className="truncate w-full">{node.power.power_name}</div>
+          </div>
 
-  // Handle mouse down on the drag handle
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  // Handle mouse move for resizing
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !sidebarRef.current) return;
-
-      const newWidth = e.clientX;
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
-        setSidebarWidth(newWidth);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-    };
-
-    if (isDragging) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-    }
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDragging]);
-
-  // Helper function to check if a node contains a power with the given ID - optimized with early returns
-  const checkNodeContainsPower = useCallback(
-    (
-      parentNode: PowerNode,
-      powerId: string,
-      visited = new Set<string>()
-    ): boolean => {
-      if (
-        !parentNode.power.power_id ||
-        visited.has(parentNode.power.power_id)
-      ) {
-        return false;
-      }
-      visited.add(parentNode.power.power_id);
-
-      // Check if this node is the target power - early return for performance
-      if (parentNode.power.power_id === powerId) {
-        return true;
-      }
-
-      // Check all standard child types using the constant array
-      for (const key of CHILD_KEYS) {
-        const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
-        const childNode = parentNode.children[childKey];
-
-        // Early return if direct match
-        if (childNode && childNode.power.power_id === powerId) {
-          return true;
-        }
-
-        // Recursive check with new visited set to avoid modifying the original
-        if (
-          childNode &&
-          checkNodeContainsPower(childNode, powerId, new Set(visited))
-        ) {
-          return true;
-        }
-      }
-
-      // Check directional children
-      if (parentNode.children.if_dir) {
-        for (const dirChild of parentNode.children.if_dir) {
-          // Early return if direct match
-          if (dirChild.node.power.power_id === powerId) {
-            return true;
-          }
-
-          // Recursive check with new visited set
-          if (
-            checkNodeContainsPower(dirChild.node, powerId, new Set(visited))
-          ) {
-            return true;
-          }
-        }
-      }
-
-      return false;
+          {childNodesRendering}
+        </li>
+      );
     },
-    []
+    (prevProps, nextProps) => {
+      // Custom comparison function to determine if the component should re-render
+      return (
+        prevProps.node.power.power_id === nextProps.node.power.power_id &&
+        prevProps.node.expanded === nextProps.node.expanded &&
+        prevProps.depth === nextProps.depth &&
+        prevProps.selectedPower?.power_id === nextProps.selectedPower?.power_id
+      );
+    }
   );
 
-  // Function to expand all parent groups and nodes for a selected power - optimized traversal
+  // Note: We've inlined the PowerGroup and UngroupedPowers components directly into the renderedContent
+  // useMemo below for better performance and to avoid unused component warnings
+
+  // Render the main component
+  // Effect to expand parents when a power is selected
   const expandParentsForPower = useCallback(
-    (powerId: string | null | undefined) => {
+    (powerId: string | undefined) => {
       if (!powerId) return;
 
-      // Find the group that contains this power
-      let foundInGroup = false;
-      let groupName = "";
-
-      // Helper function to expand a node in a collection
-      const expandNodeInCollection = (
-        nodes: PowerNode[],
-        nodeToExpand: PowerNode,
-        updateFn: (updater: (prev: PowerNode[]) => PowerNode[]) => void
-      ) => {
-        updateFn((prev) => {
-          return prev.map((n) => {
-            if (n.power.power_id === nodeToExpand.power.power_id) {
-              return { ...n, expanded: true };
-            }
-            return n;
-          });
+      // Helper function to update node expansion state
+      const updateNodeExpansion = (nodes: PowerNode[]): PowerNode[] => {
+        return nodes.map((node) => {
+          // Check if this node contains the selected power
+          if (
+            node.power.power_id &&
+            checkNodeContainsPower(node, powerId, new Set())
+          ) {
+            // Expand this node
+            return { ...node, expanded: true };
+          }
+          return node;
         });
       };
 
-      // Check in grouped powers
-      for (const [group, nodes] of Object.entries(groupedPowerNodes)) {
-        // First check for direct match
-        const directMatch = nodes.find(
-          (node) => node.power.power_id === powerId
-        );
-        if (directMatch) {
-          foundInGroup = true;
-          groupName = group;
-          break;
+      // Update grouped nodes
+      setGroupedPowerNodes((prevGrouped) => {
+        const newGrouped = { ...prevGrouped };
+        for (const key in newGrouped) {
+          newGrouped[key] = updateNodeExpansion(newGrouped[key]);
         }
+        return newGrouped;
+      });
 
-        // Then check for child matches
-        for (const node of nodes) {
-          // Check if this node contains the power in its children
-          if (checkNodeContainsPower(node, powerId)) {
-            foundInGroup = true;
-            groupName = group;
-
-            // Expand this node
-            expandNodeInCollection(groupedPowerNodes[group], node, (updater) =>
-              setGroupedPowerNodes((prev) => {
-                const newGrouped = { ...prev };
-                newGrouped[group] = updater(newGrouped[group]);
-                return newGrouped;
-              })
-            );
-
-            break;
-          }
-        }
-        if (foundInGroup) break;
-      }
-
-      // If found in a group, expand that group
-      if (foundInGroup) {
-        setExpandedGroups((prev) => ({
-          ...prev,
-          [groupName]: true,
-        }));
-      }
-
-      // Check in ungrouped powers if not found in groups
-      if (!foundInGroup) {
-        // First check for direct match
-        const directMatch = ungroupedPowerNodes.find(
-          (node) => node.power.power_id === powerId
-        );
-        if (directMatch) {
-          // No need to expand anything for direct matches in ungrouped
-          return;
-        }
-
-        for (const node of ungroupedPowerNodes) {
-          // Check if this node contains the power in its children
-          if (checkNodeContainsPower(node, powerId)) {
-            // Expand this node
-            expandNodeInCollection(
-              ungroupedPowerNodes,
-              node,
-              setUngroupedPowerNodes
-            );
-            break;
-          }
-        }
-      }
+      // Update ungrouped nodes
+      setUngroupedPowerNodes((prevUngrouped) =>
+        updateNodeExpansion(prevUngrouped)
+      );
     },
-    [groupedPowerNodes, ungroupedPowerNodes, checkNodeContainsPower]
+    [checkNodeContainsPower]
   );
 
-  // Track if we've already scrolled to the current selected power
-  const hasScrolledRef = useRef<string | null>(null);
-
-  // Scroll to selected power when it changes, but only once per selection
+  // Effect to expand parent nodes when a power is selected
   useEffect(() => {
-    if (
-      selectedPower?.power_id &&
-      hasScrolledRef.current !== selectedPower.power_id
-    ) {
-      // Expand parent nodes first
+    if (selectedPower?.power_id) {
+      // Expand all parent groups for this power
       expandParentsForPower(selectedPower.power_id);
 
-      // Give time for the DOM to update after expansion
+      // Scroll to the selected power after a short delay to allow rendering
       setTimeout(() => {
         if (selectedPowerRef.current && scrollContainerRef.current) {
-          // Get current scroll container position
-          const container = scrollContainerRef.current;
-          const element = selectedPowerRef.current;
-
-          // Calculate the new scroll position to only change vertical scroll
-          const elementRect = element.getBoundingClientRect();
-          const containerRect = container.getBoundingClientRect();
-
-          // Calculate how far to scroll to center the element vertically
-          const elementCenter = elementRect.top + elementRect.height / 2;
-          const containerCenter = containerRect.top + containerRect.height / 2;
-          const scrollAmount = elementCenter - containerCenter;
-
-          // Only scroll vertically
-          container.scrollTop += scrollAmount;
-
-          // Mark that we've scrolled to this power
-          hasScrolledRef.current = selectedPower.power_id || null;
+          selectedPowerRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       }, 100);
     }
-  }, [selectedPower, expandParentsForPower]);
+  }, [selectedPower?.power_id, expandParentsForPower]);
 
-  // Render the component
-  return (
-    <aside
-      ref={sidebarRef}
-      className="h-[calc(100vh-2rem)] flex-shrink-0 overflow-hidden flex flex-col border rounded-md shadow-sm relative"
-      style={{ width: `${sidebarWidth}px` }}
-    >
-      <div className="p-2 bg-base-200 font-bold border-b sticky top-0 z-10">
-        Power List
-      </div>
-      <div
-        ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto custom-scrollbar"
-      >
-        <ul className="menu menu-compact w-full">
-          {/* Render grouped powers */}
-          {Object.entries(groupedPowerNodes).map(([groupName, nodes]) => (
-            <li key={groupName} className="mb-4">
-              <div
-                className="font-bold text-lg text-sky-400 sticky top-0 bg-base-100 z-10 flex items-center p-2 border-b border-base-300"
-                onClick={() => toggleGroup(groupName)}
-              >
-                <span>{groupName}</span>
-              </div>
-              {expandedGroups[groupName] && (
-                <ul className="ml-2 mt-2">
-                  {nodes.map((node) => renderPowerNode(node))}
-                </ul>
-              )}
-            </li>
-          ))}
+  // State for resize handle
+  const [isDragging, setIsDragging] = useState(false);
 
-          {/* Render ungrouped powers */}
-          {ungroupedPowerNodes.length > 0 && (
-            <li className="mb-4">
-              <div className="font-bold text-lg sticky top-0 bg-base-100 z-10 p-2 border-b border-base-300">
-                Ungrouped Powers
-              </div>
-              <ul className="ml-2 mt-2">
-                {ungroupedPowerNodes.map((node) => renderPowerNode(node))}
+  // Handle mouse down on resize handle
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+
+      // These variables will be used in the future implementation of resizing
+      // We're keeping them here as placeholders for the resize functionality
+      // that would be implemented in the handleMouseMove function
+      const _startX = e.clientX;
+      const _startWidth = document.documentElement.clientWidth;
+
+      const handleMouseMove = (_e: MouseEvent) => {
+        if (!isDragging) return;
+
+        // Resize implementation would go here
+        // Example implementation (commented out):
+        // const delta = _e.clientX - _startX;
+        // const newWidth = Math.max(200, Math.min(400, _startWidth + delta));
+        // Apply the new width to the appropriate element
+      };
+
+      const handleMouseUp = () => {
+        setIsDragging(false);
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [isDragging]
+  );
+
+  // Memoize the main content rendering for better performance
+  const renderedContent = useMemo(() => {
+    return (
+      <>
+        <ul className="menu p-0 m-0">
+          {groupedPowerNodes &&
+            Object.entries(groupedPowerNodes).map(([group, nodes]) => (
+              <li key={group} className="mb-2">
+                <div
+                  className="flex items-center cursor-pointer p-1 hover:bg-base-200 rounded-md"
+                  onClick={() => toggleGroup(group)}
+                >
+                  <div className="mr-1">
+                    {expandedGroups[group] ? (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    ) : (
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                  <div className="font-medium">{group}</div>
+                  <div className="ml-2 text-xs text-gray-500">
+                    {nodes.length}
+                  </div>
+                </div>
+                {expandedGroups[group] && (
+                  <ul className="menu ml-4 mt-1">
+                    {nodes.map((node) => (
+                      <PowerNodeRenderer
+                        key={
+                          node.power.power_id || `node-${node.power.power_name}`
+                        }
+                        node={node}
+                        depth={0}
+                        visited={new Set()}
+                        onSelectPower={onSelectPower}
+                        selectedPower={selectedPower}
+                        toggleNode={toggleNode}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          {ungroupedPowerNodes && ungroupedPowerNodes.length > 0 && (
+            <li className="mb-2">
+              <div className="font-medium p-1">Ungrouped</div>
+              <ul className="menu ml-4 mt-1">
+                {ungroupedPowerNodes.map((node) => (
+                  <PowerNodeRenderer
+                    key={node.power.power_id || `node-${node.power.power_name}`}
+                    node={node}
+                    depth={0}
+                    visited={new Set()}
+                    onSelectPower={onSelectPower}
+                    selectedPower={selectedPower}
+                    toggleNode={toggleNode}
+                  />
+                ))}
               </ul>
             </li>
           )}
         </ul>
+      </>
+    );
+  }, [
+    groupedPowerNodes,
+    ungroupedPowerNodes,
+    expandedGroups,
+    toggleGroup,
+    onSelectPower,
+    selectedPower,
+    toggleNode,
+  ]);
+
+  return (
+    <div className="flex flex-col h-full relative overflow-hidden">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto custom-scrollbar p-2"
+      >
+        {renderedContent}
       </div>
       {/* Resize handle */}
       <div
@@ -792,7 +865,7 @@ const PowerList: React.FC<PowerListProps> = ({
             : "rgba(100, 100, 100, 0.3)",
         }}
       />
-    </aside>
+    </div>
   );
 };
 
