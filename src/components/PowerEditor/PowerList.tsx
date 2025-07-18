@@ -30,6 +30,17 @@ interface GroupedPowers {
   [key: string]: PowerNode[];
 }
 
+// Define child keys as a constant to be reused throughout the component
+const CHILD_KEYS = [
+  "normal",
+  "if_hit",
+  "if_release",
+  "if_wall",
+  "if_button",
+  "if_interrupt",
+] as const;
+type ChildKey = (typeof CHILD_KEYS)[number];
+
 const PowerList: React.FC<PowerListProps> = ({
   powers,
   selectedPower,
@@ -196,11 +207,10 @@ const PowerList: React.FC<PowerListProps> = ({
         }
       };
 
-      // Process all standard combo types using the same keys array
-      const comboKeys = ['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const;
-      
+      // Process all standard combo types using the constant
+
       // Process each combo relationship
-      comboKeys.forEach(key => {
+      CHILD_KEYS.forEach((key) => {
         processComboRelationship(key, key);
       });
 
@@ -269,6 +279,33 @@ const PowerList: React.FC<PowerListProps> = ({
     }));
   };
 
+  // Helper function to process directional children (if_dir)
+  const processDirectionalChildren = (
+    dirNodes: { direction: Direction; node: PowerNode }[] | undefined,
+    updateFn: (node: PowerNode) => PowerNode
+  ): { updatedDirectionalNodes: typeof dirNodes; hasChanges: boolean } => {
+    if (!dirNodes || dirNodes.length === 0) {
+      return { updatedDirectionalNodes: dirNodes, hasChanges: false };
+    }
+
+    const updatedDirNodes = dirNodes.map((dirNode) => {
+      const updatedNode = updateFn(dirNode.node);
+      if (updatedNode !== dirNode.node) {
+        return { ...dirNode, node: updatedNode };
+      }
+      return dirNode;
+    });
+
+    const hasChanges = updatedDirNodes.some(
+      (dirNode, i) => dirNode !== dirNodes[i]
+    );
+
+    return {
+      updatedDirectionalNodes: hasChanges ? updatedDirNodes : dirNodes,
+      hasChanges,
+    };
+  };
+
   const toggleNode = (node: PowerNode) => {
     // Recursive function to update nodes and their children
     const updateNodesRecursively = (nodes: PowerNode[]): PowerNode[] => {
@@ -297,29 +334,26 @@ const PowerList: React.FC<PowerListProps> = ({
             if (!child) return;
 
             if (key === "if_dir" && Array.isArray(child)) {
-              const updatedDirNodes = child.map((dirNode) => {
-                const updatedNode = updateNodeRecursively(dirNode.node);
-                if (updatedNode !== dirNode.node) {
-                  return { ...dirNode, node: updatedNode };
-                }
-                return dirNode;
-              });
+              // Use our helper function for processing directional children
+              const { updatedDirectionalNodes, hasChanges } =
+                processDirectionalChildren(child, updateNodeRecursively);
 
-              if (updatedDirNodes.some((dirNode, i) => dirNode !== child[i])) {
-                updatedChildren.if_dir = updatedDirNodes;
+              if (hasChanges) {
+                updatedChildren.if_dir = updatedDirectionalNodes;
                 hasUpdatedChildren = true;
               }
             } else if (key !== "if_dir") {
               // Type-safe way to handle the different child types
-              // Handle all child types generically using type assertion to ensure type safety
-              const childKey = key as keyof Omit<PowerNode['children'], 'if_dir'>;
+              // Handle all child types generically using our ChildKey type
+              const childKey = key as ChildKey;
               const childValue = childNode.children[childKey];
-              
+
               if (childValue) {
                 const updatedNode = updateNodeRecursively(childValue);
                 if (updatedNode !== childValue) {
                   // Use type assertion to safely assign the updated node
-                  (updatedChildren[childKey] as typeof childValue) = updatedNode;
+                  (updatedChildren[childKey] as typeof childValue) =
+                    updatedNode;
                   hasUpdatedChildren = true;
                 }
               }
@@ -342,10 +376,9 @@ const PowerList: React.FC<PowerListProps> = ({
         };
 
         // Process all standard child nodes (excluding if_dir which needs special handling)
-        const childKeys = ['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const;
-        
+
         // Check each child type
-        childKeys.forEach(key => {
+        CHILD_KEYS.forEach((key) => {
           const childValue = n.children[key];
           if (childValue) {
             const updatedNode = updateNodeRecursively(childValue);
@@ -357,24 +390,13 @@ const PowerList: React.FC<PowerListProps> = ({
           }
         });
 
-        // Check if_dir children
-        if (n.children.if_dir && n.children.if_dir.length > 0) {
-          const updatedDirNodes = n.children.if_dir.map((dirNode) => {
-            const updatedNode = updateNodeRecursively(dirNode.node);
-            if (updatedNode !== dirNode.node) {
-              return { ...dirNode, node: updatedNode };
-            }
-            return dirNode;
-          });
+        // Process directional children using a helper function
+        const { updatedDirectionalNodes, hasChanges } =
+          processDirectionalChildren(n.children.if_dir, updateNodeRecursively);
 
-          if (
-            updatedDirNodes.some(
-              (dirNode, i) => dirNode !== n.children.if_dir?.[i]
-            )
-          ) {
-            updatedChildren.if_dir = updatedDirNodes;
-            hasUpdatedChildren = true;
-          }
+        if (hasChanges) {
+          updatedChildren.if_dir = updatedDirectionalNodes;
+          hasUpdatedChildren = true;
         }
 
         // If any children were updated, return a new node with updated children
@@ -408,6 +430,21 @@ const PowerList: React.FC<PowerListProps> = ({
     );
   };
 
+  // Helper function to check if a node has any children
+  const hasChildren = (node: PowerNode): boolean => {
+    // Check standard child nodes
+    for (const key of CHILD_KEYS) {
+      if (node.children[key]) return true;
+    }
+
+    // Check directional children
+    if (node.children.if_dir && node.children.if_dir.length > 0) {
+      return true;
+    }
+
+    return false;
+  };
+
   // Render a power node with its children
   const renderPowerNode = (
     node: PowerNode,
@@ -432,11 +469,8 @@ const PowerList: React.FC<PowerListProps> = ({
       newVisited.add(node.power.power_id);
     }
 
-    // Check if node has any children
-    const hasChildren = Object.values(node.children).some(
-      (child) =>
-        child !== undefined && (Array.isArray(child) ? child.length > 0 : true)
-    );
+    // Check if node has any children using our helper function
+    const nodeHasChildren = hasChildren(node);
 
     // Check if this node is the selected power or a parent of the selected power
     const isSelected = selectedPower?.power_id === node.power.power_id;
@@ -467,11 +501,10 @@ const PowerList: React.FC<PowerListProps> = ({
         );
       };
 
-      // Check all standard combo types using the same keys we defined elsewhere
-      const childKeys = ['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const;
-      
+      // Check all standard combo types using our constant
+
       // Check each child type
-      for (const key of childKeys) {
+      for (const key of CHILD_KEYS) {
         if (checkChild(currentNode.children[key])) return true;
       }
 
@@ -523,17 +556,17 @@ const PowerList: React.FC<PowerListProps> = ({
           </div>
         </div>
 
-        {hasChildren && node.expanded && (
-          <ul className="border-l border-base-300 ml-2">
-            {/* Render standard child nodes using the same childKeys array */}
-            {(['normal', 'if_hit', 'if_release', 'if_wall', 'if_button', 'if_interrupt'] as const).map(key => {
+        {nodeHasChildren && node.expanded && (
+          <ul className="border-l border-base-300 ml-1">
+            {/* Render standard child nodes using our constant */}
+            {CHILD_KEYS.map((key) => {
               const childNode = node.children[key];
               if (!childNode) return null;
-              
+
               return (
                 <li key={`${key}-${childNode.power.power_id || depth}`}>
                   <div
-                    className="text-xs text-gray-500 pl-2 py-1"
+                    className="text-xs text-gray-500 pl-2 py-1 pointer-events-none select-none"
                     style={{ paddingLeft: `${depth * 8 + 10}px` }}
                   >
                     {key}:
@@ -545,7 +578,7 @@ const PowerList: React.FC<PowerListProps> = ({
             {node.children.if_dir && node.children.if_dir.length > 0 && (
               <li>
                 <div
-                  className="text-xs text-gray-500 pl-2 py-1"
+                  className="text-xs text-gray-500 pl-2 py-1 pointer-events-none select-none"
                   style={{ paddingLeft: `${depth * 8 + 10}px` }}
                 >
                   if_dir:
@@ -554,7 +587,7 @@ const PowerList: React.FC<PowerListProps> = ({
                   {node.children.if_dir.map((dirNode, idx) => (
                     <li key={`${node.power.power_id || "dir"}-dir-${idx}`}>
                       <div
-                        className="text-xs text-gray-500 pl-2 py-1"
+                        className="text-xs text-gray-500 pl-2 py-1 pointer-events-none select-none"
                         style={{ paddingLeft: `${depth * 8 + 16}px` }}
                       >
                         {dirNode.direction}:
@@ -583,13 +616,10 @@ const PowerList: React.FC<PowerListProps> = ({
           {Object.entries(groupedPowerNodes).map(([groupName, nodes]) => (
             <li key={groupName} className="mb-4">
               <div
-                className="font-bold text-lg sticky top-0 bg-base-100 z-10 flex justify-between items-center p-2 border-b border-base-300"
+                className="font-bold text-lg text-sky-400 sticky top-0 bg-base-100 z-10 flex items-center p-2 border-b border-base-300"
                 onClick={() => toggleGroup(groupName)}
               >
                 <span>{groupName}</span>
-                <button className="btn btn-xs btn-ghost">
-                  {expandedGroups[groupName] ? "\u2212" : "+"}
-                </button>
               </div>
               {expandedGroups[groupName] && (
                 <ul className="ml-2 mt-2">
