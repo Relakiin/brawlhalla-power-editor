@@ -151,7 +151,7 @@ const PowerList: React.FC<PowerListProps> = ({
       return nameMap.get(name.toLowerCase());
     };
 
-    // Function to build combo tree recursively
+    // Function to build combo tree recursively with improved traversal
     const buildComboTree = (
       node: PowerNode,
       processedIds = new Set<string>()
@@ -184,18 +184,18 @@ const PowerList: React.FC<PowerListProps> = ({
         }
       };
 
-      // Helper function to process a combo relationship
+      // Helper function to process a combo relationship with proper type safety
       const processComboRelationship = (
-        comboType: keyof ComboTree,
-        childKey: keyof PowerNode["children"]
+        comboType: keyof Omit<ComboTree, "if_dir">,
+        childKey: keyof Omit<PowerNode["children"], "if_dir">
       ) => {
         const comboPower = comboTree[comboType] as Power | undefined;
         if (!comboPower) return;
 
         const targetNode = findNodeByPowerName(comboPower.power_name);
         if (targetNode && targetNode.power.power_id) {
-          // Set the child node in the appropriate relationship slot
-          (node.children[childKey] as any) = targetNode;
+          // Set the child node in the appropriate relationship slot with proper type assertion
+          (node.children[childKey] as typeof targetNode) = targetNode;
 
           // Mark this node as referenced in a combo tree
           const powerId = targetNode.power.power_id;
@@ -205,16 +205,15 @@ const PowerList: React.FC<PowerListProps> = ({
             addParentRelationship(node, targetNode);
           }
 
-          // Recursively build the tree for this node
+          // Recursively build the tree for this node - use a new Set to avoid modifying the original
           buildComboTree(targetNode, new Set(processedIds));
         }
       };
 
-      // Process all standard combo types using the constant
-
-      // Process each combo relationship
+      // Process all standard combo types using the constant array
       CHILD_KEYS.forEach((key) => {
-        processComboRelationship(key, key);
+        const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
+        processComboRelationship(key, childKey);
       });
 
       // Process directional combos separately as they have a different structure
@@ -282,8 +281,6 @@ const PowerList: React.FC<PowerListProps> = ({
     }));
   };
 
-  // No longer needed - removed helper function for processing directional children
-
   // Simple function to toggle a node's expanded state
   const toggleNodeExpansion = (node: PowerNode): PowerNode => {
     return { ...node, expanded: !node.expanded };
@@ -316,11 +313,12 @@ const PowerList: React.FC<PowerListProps> = ({
     );
   };
 
-  // Helper function to check if a node has any children
-  const hasChildren = (node: PowerNode): boolean => {
-    // Check standard child nodes
+  // Helper function to check if a node has any children - memoized for performance
+  const hasChildren = useCallback((node: PowerNode): boolean => {
+    // Check standard child nodes using the constant array
     for (const key of CHILD_KEYS) {
-      if (node.children[key]) return true;
+      const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
+      if (node.children[childKey]) return true;
     }
 
     // Check directional children
@@ -329,7 +327,60 @@ const PowerList: React.FC<PowerListProps> = ({
     }
 
     return false;
-  };
+  }, []);
+
+  // Check if a node is in the path to the selected node - optimized with memoization
+  const isNodeInPathToSelected = useCallback(
+    (
+      currentNode: PowerNode,
+      targetPowerId: string | null | undefined,
+      visited = new Set<string>()
+    ): boolean => {
+      // Early return if no target power ID
+      if (!targetPowerId) return false;
+
+      // Prevent infinite recursion
+      if (
+        !currentNode.power.power_id ||
+        visited.has(currentNode.power.power_id)
+      ) {
+        return false;
+      }
+      visited.add(currentNode.power.power_id);
+
+      // Direct match check for early return
+      if (currentNode.power.power_id === targetPowerId) {
+        return true;
+      }
+
+      // Helper function to check a child node
+      const checkChild = (childNode: PowerNode | undefined): boolean => {
+        if (!childNode) return false;
+        if (childNode.power.power_id === targetPowerId) return true;
+        return isNodeInPathToSelected(
+          childNode,
+          targetPowerId,
+          new Set(visited)
+        );
+      };
+
+      // Check each standard child type using the constant array
+      for (const key of CHILD_KEYS) {
+        const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
+        if (checkChild(currentNode.children[childKey])) return true;
+      }
+
+      // Check directional combos
+      if (currentNode.children.if_dir) {
+        for (const dirCombo of currentNode.children.if_dir) {
+          if (checkChild(dirCombo.node)) return true;
+        }
+      }
+
+      return false;
+    },
+    []
+  );
 
   // Render a power node with its children
   const renderPowerNode = (
@@ -362,60 +413,15 @@ const PowerList: React.FC<PowerListProps> = ({
     // Child nodes are always shown when their parent is expanded
     const isExpandable = depth === 0;
 
-    // Check if this node is the selected power or a parent of the selected power
-    const isSelected = selectedPower?.power_id === node.power.power_id;
+    // Check if this node is the selected power
+    const isSelected = node.power.power_id === selectedPower?.power_id;
 
-    // Use a more direct approach to check if this node is in the path to the selected node
-    const isNodeInPathToSelected = (
-      currentNode: PowerNode,
-      targetPowerId: string,
-      visited = new Set<string>()
-    ): boolean => {
-      // Prevent infinite recursion
-      if (
-        !currentNode.power.power_id ||
-        visited.has(currentNode.power.power_id)
-      ) {
-        return false;
-      }
-      visited.add(currentNode.power.power_id);
-
-      // Helper function to check a child node
-      const checkChild = (childNode: PowerNode | undefined): boolean => {
-        if (!childNode) return false;
-        if (childNode.power.power_id === targetPowerId) return true;
-        return isNodeInPathToSelected(
-          childNode,
-          targetPowerId,
-          new Set(visited)
-        );
-      };
-
-      // Check all standard combo types using our constant
-
-      // Check each child type
-      for (const key of CHILD_KEYS) {
-        if (checkChild(currentNode.children[key])) return true;
-      }
-
-      // Check directional combos
-      if (currentNode.children.if_dir) {
-        for (const dirCombo of currentNode.children.if_dir) {
-          if (checkChild(dirCombo.node)) return true;
-        }
-      }
-
-      return false;
-    };
-
-    let isParentOfSelected = false;
-    if (
-      selectedPower?.power_id &&
-      node.power.power_id &&
-      node.power.power_id !== selectedPower.power_id
-    ) {
-      isParentOfSelected = isNodeInPathToSelected(node, selectedPower.power_id);
-    }
+    // Check if this node is in the path to the selected node
+    const isParentOfSelected =
+      selectedPower &&
+      selectedPower.power_id &&
+      node.power.power_id !== selectedPower.power_id &&
+      isNodeInPathToSelected(node, selectedPower.power_id, new Set());
 
     // Determine the highlight class based on selection state
     let highlightClass = "";
@@ -454,7 +460,11 @@ const PowerList: React.FC<PowerListProps> = ({
           <ul className="border-l border-base-300">
             {/* Render standard child nodes using our constant */}
             {CHILD_KEYS.map((key) => {
-              const childNode = node.children[key];
+              const childKey = key as keyof Omit<
+                PowerNode["children"],
+                "if_dir"
+              >;
+              const childNode = node.children[childKey];
               if (!childNode) return null;
 
               return (
@@ -532,7 +542,7 @@ const PowerList: React.FC<PowerListProps> = ({
     };
   }, [isDragging]);
 
-  // Helper function to check if a node contains a power with the given ID
+  // Helper function to check if a node contains a power with the given ID - optimized with early returns
   const checkNodeContainsPower = useCallback(
     (
       parentNode: PowerNode,
@@ -547,17 +557,22 @@ const PowerList: React.FC<PowerListProps> = ({
       }
       visited.add(parentNode.power.power_id);
 
-      // Check if this node is the target power
+      // Check if this node is the target power - early return for performance
       if (parentNode.power.power_id === powerId) {
         return true;
       }
 
-      // Check all standard child types
+      // Check all standard child types using the constant array
       for (const key of CHILD_KEYS) {
-        const childNode = parentNode.children[key];
+        const childKey = key as keyof Omit<PowerNode["children"], "if_dir">;
+        const childNode = parentNode.children[childKey];
+
+        // Early return if direct match
         if (childNode && childNode.power.power_id === powerId) {
           return true;
         }
+
+        // Recursive check with new visited set to avoid modifying the original
         if (
           childNode &&
           checkNodeContainsPower(childNode, powerId, new Set(visited))
@@ -569,9 +584,12 @@ const PowerList: React.FC<PowerListProps> = ({
       // Check directional children
       if (parentNode.children.if_dir) {
         for (const dirChild of parentNode.children.if_dir) {
+          // Early return if direct match
           if (dirChild.node.power.power_id === powerId) {
             return true;
           }
+
+          // Recursive check with new visited set
           if (
             checkNodeContainsPower(dirChild.node, powerId, new Set(visited))
           ) {
@@ -585,7 +603,7 @@ const PowerList: React.FC<PowerListProps> = ({
     []
   );
 
-  // Function to expand all parent groups and nodes for a selected power
+  // Function to expand all parent groups and nodes for a selected power - optimized traversal
   const expandParentsForPower = useCallback(
     (powerId: string | null | undefined) => {
       if (!powerId) return;
@@ -594,31 +612,49 @@ const PowerList: React.FC<PowerListProps> = ({
       let foundInGroup = false;
       let groupName = "";
 
+      // Helper function to expand a node in a collection
+      const expandNodeInCollection = (
+        nodes: PowerNode[],
+        nodeToExpand: PowerNode,
+        updateFn: (updater: (prev: PowerNode[]) => PowerNode[]) => void
+      ) => {
+        updateFn((prev) => {
+          return prev.map((n) => {
+            if (n.power.power_id === nodeToExpand.power.power_id) {
+              return { ...n, expanded: true };
+            }
+            return n;
+          });
+        });
+      };
+
       // Check in grouped powers
       for (const [group, nodes] of Object.entries(groupedPowerNodes)) {
-        for (const node of nodes) {
-          if (node.power.power_id === powerId) {
-            foundInGroup = true;
-            groupName = group;
-            break;
-          }
+        // First check for direct match
+        const directMatch = nodes.find(
+          (node) => node.power.power_id === powerId
+        );
+        if (directMatch) {
+          foundInGroup = true;
+          groupName = group;
+          break;
+        }
 
+        // Then check for child matches
+        for (const node of nodes) {
           // Check if this node contains the power in its children
           if (checkNodeContainsPower(node, powerId)) {
             foundInGroup = true;
             groupName = group;
 
             // Expand this node
-            setGroupedPowerNodes((prev) => {
-              const newGrouped = { ...prev };
-              newGrouped[group] = newGrouped[group].map((n) => {
-                if (n.power.power_id === node.power.power_id) {
-                  return { ...n, expanded: true };
-                }
-                return n;
-              });
-              return newGrouped;
-            });
+            expandNodeInCollection(groupedPowerNodes[group], node, (updater) =>
+              setGroupedPowerNodes((prev) => {
+                const newGrouped = { ...prev };
+                newGrouped[group] = updater(newGrouped[group]);
+                return newGrouped;
+              })
+            );
 
             break;
           }
@@ -636,22 +672,24 @@ const PowerList: React.FC<PowerListProps> = ({
 
       // Check in ungrouped powers if not found in groups
       if (!foundInGroup) {
-        for (const node of ungroupedPowerNodes) {
-          if (node.power.power_id === powerId) {
-            break;
-          }
+        // First check for direct match
+        const directMatch = ungroupedPowerNodes.find(
+          (node) => node.power.power_id === powerId
+        );
+        if (directMatch) {
+          // No need to expand anything for direct matches in ungrouped
+          return;
+        }
 
+        for (const node of ungroupedPowerNodes) {
           // Check if this node contains the power in its children
           if (checkNodeContainsPower(node, powerId)) {
             // Expand this node
-            setUngroupedPowerNodes((prev) => {
-              return prev.map((n) => {
-                if (n.power.power_id === node.power.power_id) {
-                  return { ...n, expanded: true };
-                }
-                return n;
-              });
-            });
+            expandNodeInCollection(
+              ungroupedPowerNodes,
+              node,
+              setUngroupedPowerNodes
+            );
             break;
           }
         }
