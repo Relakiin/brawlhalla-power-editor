@@ -45,8 +45,16 @@ export const getVisualizerData = (power: Power): VisualizerData => {
   // create casts
   const casts: Cast[] = [];
   for (let i = 0; i < length; i++) {
+    const castTimeSplit = castTimes[i]?.split("@")[0].split(":") || [];
+    const castTimeUnit = castTimes[i]
+      ? {
+          startup: Number(castTimeSplit[0]) || 0,
+          active: (Number(castTimeSplit[1]) || 0) + 1,
+        }
+      : undefined;
+
     casts.push({
-      cast_time: castTimes[i] || undefined,
+      cast_time: castTimeUnit,
       cast_impulse_x: castImpulsesX[i] || undefined,
       cast_impulse_y: castImpulsesY[i] || undefined,
       fire_impulse_x: fireImpulsesX[i] || undefined,
