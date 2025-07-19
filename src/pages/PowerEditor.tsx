@@ -23,18 +23,10 @@ const PowerEditor: React.FC = () => {
   const [descriptions, setDescriptions] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    //searchbar list filtering
+    // Always show all powers, no filtering
     if (!powers) return;
-    if (searchQuery === "") {
-      setFilteredPowers(powers);
-      return;
-    }
-    setFilteredPowers(
-      powers.filter((p) =>
-        p.power_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    );
-  }, [searchQuery, powers]);
+    setFilteredPowers(powers);
+  }, [powers]);
 
   useEffect(() => {
     //load descriptions json from rust
@@ -246,13 +238,13 @@ const PowerEditor: React.FC = () => {
   };
 
   return (
-    <div className="flex">
+    <div className="flex h-screen overflow-hidden">
       <PowerList
         powers={filteredPowers}
         selectedPower={selectedPower}
         onSelectPower={setSelectedPower}
       />
-      <div className="flex-1">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <PowerEditorNavbar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -260,8 +252,10 @@ const PowerEditor: React.FC = () => {
           onWriteFile={handleWriteFile}
           onCreatePower={handleCreatePower}
           onDeletePower={handleDeletePower}
+          powers={powers}
+          onSelectPower={setSelectedPower}
         />
-        <main className="p-4 mb-5">
+        <main className="p-4 flex-1 overflow-y-auto">
           {selectedPower ? (
             <>
               <ComboTreeViewer
@@ -269,7 +263,10 @@ const PowerEditor: React.FC = () => {
                 reverseComboTree={getReverseComboTreeForPower(selectedPower)}
                 onSelectPower={setSelectedPower}
               />
-              <PowerVisualizer visualizerData={getVisualizerData(selectedPower)} powerId={selectedPower.power_id ?? ""} />
+              <PowerVisualizer
+                visualizerData={getVisualizerData(selectedPower)}
+                powerId={selectedPower.power_id ?? ""}
+              />
               <PowerDetails
                 power={selectedPower}
                 descriptions={descriptions}

@@ -54,12 +54,12 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
   const scaleToPillEdge = (x: number, y: number) => {
     const dx = x - cx;
     const dy = y - cy;
-    
+
     // Determine if the point is in the semicircle region or rectangle region
     // For a horizontal pill (rx > ry)
     if (rx > ry) {
       const rectHalfWidth = rx - ry;
-      
+
       // Check if point is in left or right semicircle region
       if (Math.abs(dx) > rectHalfWidth) {
         // In semicircle region
@@ -68,7 +68,7 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
         const distance = Math.sqrt(newDx * newDx + dy * dy);
         return {
           x: circleCenterX + (newDx / distance) * ry,
-          y: cy + (dy / distance) * ry
+          y: cy + (dy / distance) * ry,
         };
       } else {
         // In rectangle region
@@ -76,30 +76,33 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
           const scale = Math.abs(ry / dy);
           return {
             x: cx + dx,
-            y: cy + dy * scale
+            y: cy + dy * scale,
           };
         } else {
           // Point is inside the pill
-          const scale = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+          const scale = Math.sqrt(
+            (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry)
+          );
           return {
             x: cx + dx / scale,
-            y: cy + dy / scale
+            y: cy + dy / scale,
           };
         }
       }
     } else {
       // For a vertical pill (ry > rx)
       const rectHalfHeight = ry - rx;
-      
+
       // Check if point is in top or bottom semicircle region
       if (Math.abs(dy) > rectHalfHeight) {
         // In semicircle region
-        const circleCenterY = dy > 0 ? cy + rectHalfHeight : cy - rectHalfHeight;
+        const circleCenterY =
+          dy > 0 ? cy + rectHalfHeight : cy - rectHalfHeight;
         const newDy = y - circleCenterY;
         const distance = Math.sqrt(dx * dx + newDy * newDy);
         return {
           x: cx + (dx / distance) * rx,
-          y: circleCenterY + (newDy / distance) * rx
+          y: circleCenterY + (newDy / distance) * rx,
         };
       } else {
         // In rectangle region
@@ -107,14 +110,16 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
           const scale = Math.abs(rx / dx);
           return {
             x: cx + dx * scale,
-            y: cy + dy
+            y: cy + dy,
           };
         } else {
           // Point is inside the pill
-          const scale = Math.sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+          const scale = Math.sqrt(
+            (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry)
+          );
           return {
             x: cx + dx / scale,
-            y: cy + dy / scale
+            y: cy + dy / scale,
           };
         }
       }
@@ -124,14 +129,22 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
   return (
     <>
       {/* pill-shaped hitbox */}
-      <PillShape cx={cx} cy={cy} rx={rx} ry={ry} fill={fill} fillOpacity={0.2} outlineOnly={outlineOnly} />
+      <PillShape
+        cx={cx}
+        cy={cy}
+        rx={rx}
+        ry={ry}
+        fill={fill}
+        fillOpacity={0.2}
+        outlineOnly={outlineOnly}
+      />
 
       {/* direction line */}
       {Array.from({ length: maxLength }).map((_, index) => {
         let vxValue = vxValues[index];
         let vyValue = vyValues[index];
 
-        console.log("PREPROCESS VECTOR VALUES - ", vxValue, vyValue)
+        console.log("PREPROCESS VECTOR VALUES - ", vxValue, vyValue);
 
         // some moves have angles that depend on the enemy's position, here's what i could find in common
         // draw a star if both vx and vy are 0
@@ -139,7 +152,7 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
           return (
             <polygon
               key={index}
-              points={drawStar(cx, cy, 10, 5)} 
+              points={drawStar(cx, cy, 10, 5)}
               fill="none"
               stroke="white"
               strokeWidth="2"
@@ -166,12 +179,10 @@ const HitboxUnit: React.FC<HitboxUnitProps> = ({
         if (!vxValue && !vyValue) {
           return null;
         }
-        
+
         vxValue = vxValue ?? vxValues[0] ?? cx;
         vyValue = vyValue ?? vyValues[0] ?? cy;
-        
-        console.log("POSTPROCESS VECTOR VALUES - ", vxValue, vyValue)
-        
+
         const directionX = cx + vxValue;
         const directionY = cy + vyValue;
 
